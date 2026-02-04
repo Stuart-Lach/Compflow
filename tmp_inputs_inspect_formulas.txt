@@ -1,0 +1,5 @@
+row1: ['Employee ID', 'Basic Salary (Monthly)', 'Bonus (Monthly)', 'Overtime (Monthly)', 'Allowances (Monthly)', 'Other Deductions (Monthly)']
+row2: ['EMP001', '=Scenarios!D2', '=Scenarios!E2', '=Scenarios!F2', 3500, 1200]
+row3: ['EMP002', '=Scenarios!D3', '=Scenarios!E3', '=Scenarios!F3', 0, 750]
+row4: ['EMP003', '=Scenarios!D4', '=Scenarios!E4', '=Scenarios!F4', 0, 750]
+row5: ['EMP004', '=Scenarios!D5', '=Scenarios!E5', '=Scenarios!F5', 2000, 0]

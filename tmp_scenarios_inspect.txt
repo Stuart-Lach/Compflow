@@ -1,0 +1,5 @@
+row1: ['Scenario ID', 'Employee Name', 'Employee ID', 'Salary (Monthly)', 'Bonus (Monthly)', 'Overtime (Monthly)']
+row2: [1, 'Thabo Nkosi', 'EMP001', 8500, 0, 0]
+row3: [2, 'Lindiwe van der Merwe', 'EMP002', 25000, 0, 0]
+row4: [3, 'Johan Mokoena', 'EMP003', 180000, 0, 0]
+row5: [4, 'Ayanda Botha', 'EMP004', 35000, 15000, 0]

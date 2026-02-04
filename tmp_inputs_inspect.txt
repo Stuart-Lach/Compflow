@@ -1,0 +1,10 @@
+max_row=13 max_col=6
+row1: ['Employee ID', 'Basic Salary (Monthly)', 'Bonus (Monthly)', 'Overtime (Monthly)', 'Allowances (Monthly)', 'Other Deductions (Monthly)']
+row2: ['EMP001', None, None, None, 3500, 1200]
+row3: ['EMP002', None, None, None, 0, 750]
+row4: ['EMP003', None, None, None, 0, 750]
+row5: ['EMP004', None, None, None, 2000, 0]
+row6: ['EMP005', None, None, None, 3500, 0]
+row7: ['EMP006', None, None, None, 0, 1200]
+row8: ['EMP007', None, None, None, 5000, 500]
+row9: ['EMP008', None, None, None, 0, 750]
