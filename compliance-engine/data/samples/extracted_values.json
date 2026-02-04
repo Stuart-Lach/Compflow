@@ -1,0 +1,64 @@
+{
+  "extraction_date": "2026-01-27",
+  "source": "sa_payroll_workbook.xlsx",
+  "tax_brackets": [
+    {
+      "min_income": "1",
+      "max_income": "237100",
+      "rate": "0.18",
+      "base_tax": "0"
+    },
+    {
+      "min_income": "237101",
+      "max_income": "370500",
+      "rate": "0.26",
+      "base_tax": "42678"
+    },
+    {
+      "min_income": "370501",
+      "max_income": "512800",
+      "rate": "0.31",
+      "base_tax": "77362"
+    },
+    {
+      "min_income": "512801",
+      "max_income": "673000",
+      "rate": "0.36",
+      "base_tax": "121475"
+    },
+    {
+      "min_income": "673001",
+      "max_income": "857900",
+      "rate": "0.39",
+      "base_tax": "179147"
+    },
+    {
+      "min_income": "857901",
+      "max_income": "1817000",
+      "rate": "0.41",
+      "base_tax": "251258"
+    },
+    {
+      "min_income": "1817001",
+      "max_income": "99999999",
+      "rate": "0.45",
+      "base_tax": "644489"
+    }
+  ],
+  "rebates": {
+    "primary": "17235",
+    "secondary": "9444",
+    "tertiary": "3145"
+  },
+  "uif": {
+    "employee_rate": "0.01",
+    "employer_rate": "0.01",
+    "monthly_cap": "17712",
+    "annual_cap": "212544"
+  },
+  "sdl": {
+    "rate": "0.01",
+    "annual_threshold": "500000"
+  },
+  "test_cases": []
+}

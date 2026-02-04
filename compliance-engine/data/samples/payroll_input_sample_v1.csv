@@ -1,0 +1,6 @@
+payroll_run_id,company_id,pay_date,tax_year,payroll_frequency,employee_id,employment_type,basic_salary,overtime_pay,bonus_commission,allowances_taxable,allowances_non_taxable,fringe_benefits_taxable,reimbursements,other_earnings,pension_contribution_employee,retirement_annuity_employee,medical_aid_contribution_employee,other_pre_tax_deductions,union_fees,garnishees,other_post_tax_deductions,annual_payroll_estimate,is_sdl_liable_override,residency_status,employment_start_date,employment_end_date
+RUN001,COMP001,2025-03-25,2025_26,monthly,EMP001,employee,45000.00,2500.00,0,0,0,0,0,0,3600.00,0,1500.00,0,150.00,0,0,1200000,true,resident,2020-01-15,
+RUN001,COMP001,2025-03-25,2025_26,monthly,EMP002,employee,65000.00,0,5000.00,2000.00,500.00,1500.00,0,0,5200.00,1000.00,2500.00,0,200.00,500.00,0,1200000,true,resident,2019-06-01,
+RUN001,COMP001,2025-03-25,2025_26,monthly,EMP003,employee,25000.00,1000.00,0,0,0,0,0,0,2000.00,0,800.00,0,0,0,0,1200000,true,resident,2022-03-01,
+RUN001,COMP001,2025-03-25,2025_26,monthly,CON001,contractor,35000.00,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1200000,true,resident,2024-01-01,
+

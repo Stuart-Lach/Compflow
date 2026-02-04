@@ -1,0 +1,61 @@
+# Render deployment configuration
+# See https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: compliance-engine-api
+    env: python
+    region: oregon  # Choose your preferred region
+    plan: free  # Change to 'starter' or higher for production
+    branch: main  # Or your default branch
+
+    # Build
+    buildCommand: pip install -e .
+
+    # Start
+    startCommand: uvicorn src.app.main:app --host 0.0.0.0 --port $PORT
+
+    # Health check
+    healthCheckPath: /health
+
+    # Environment variables
+    envVars:
+      - key: APP_ENV
+        value: production
+
+      - key: DEBUG
+        value: false
+
+      - key: PORT
+        generateValue: true  # Render will set this automatically
+
+      - key: CORS_ORIGINS
+        value: http://localhost:3000,https://your-app.vercel.app
+        # Update this with your actual Vercel domain
+
+      - key: LOG_LEVEL
+        value: INFO
+
+      # Database - Option 1: Use Render Postgres (recommended)
+      # Uncomment below and create a Postgres database in Render dashboard
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: compliance-engine-db
+      #     property: connectionString
+
+      # Database - Option 2: Use external Postgres (e.g., Supabase)
+      # - key: DATABASE_URL
+      #   sync: false  # Mark as secret, set in Render dashboard
+
+      # Database - Option 3: Use SQLite (demo only, not persistent on Render)
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./compliance_engine.db
+
+# Optional: Add a Postgres database (recommended for production)
+# Uncomment the section below to create a Postgres database on Render
+# databases:
+#   - name: compliance-engine-db
+#     databaseName: compliance_engine
+#     user: compliance_user
+#     plan: free  # Change to 'starter' or higher for production
+#     region: oregon  # Same region as your web service

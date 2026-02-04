@@ -1,0 +1,69 @@
+{
+  "brackets": [
+    {
+      "from_amount": 1,
+      "to_amount": 237100,
+      "base_tax": 0,
+      "marginal_rate": 0.18
+    },
+    {
+      "from_amount": 237101,
+      "to_amount": 370500,
+      "base_tax": 42678,
+      "marginal_rate": 0.26
+    },
+    {
+      "from_amount": 370501,
+      "to_amount": 512800,
+      "base_tax": 77362,
+      "marginal_rate": 0.31
+    },
+    {
+      "from_amount": 512801,
+      "to_amount": 673000,
+      "base_tax": 121475,
+      "marginal_rate": 0.36
+    },
+    {
+      "from_amount": 673001,
+      "to_amount": 857900,
+      "base_tax": 179147,
+      "marginal_rate": 0.39
+    },
+    {
+      "from_amount": 857901,
+      "to_amount": 1817000,
+      "base_tax": 251258,
+      "marginal_rate": 0.41
+    },
+    {
+      "from_amount": 1817001,
+      "to_amount": 99999999,
+      "base_tax": 644489,
+      "marginal_rate": 0.45
+    }
+  ],
+  "rebates": {
+    "primary": 17235,
+    "secondary": 9444,
+    "tertiary": 3145
+  },
+  "thresholds": {
+    "under_65": 95750,
+    "65_74": 148217,
+    "75+": 165689
+  },
+  "uif": {
+    "uif_ceiling_monthly": 17712.0,
+    "uif_employee_rate": 0.01,
+    "uif_employer_rate": 0.01
+  },
+  "sdl": {
+    "sdl_rate": 0.01,
+    "sdl_threshold_annual_payroll": 500000.0
+  },
+  "source": {
+    "workbook": "C:\\Users\\adria\\Compflow\\compliance-engine\\data\\sa_payroll_workbook.xlsx",
+    "sheet": "Ruleset v1.1 (2025-26)"
+  }
+}
