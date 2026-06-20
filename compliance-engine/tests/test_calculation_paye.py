@@ -2,21 +2,21 @@
 Tests for PAYE calculation.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
-from pathlib import Path
 import json
+from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 
 import pytest
 
 from app.domain.models import PayrollFrequency
-from app.rulesets.registry import get_current_ruleset
+from app.rulesets.registry import get_ruleset
 from app.services.calculation import calculate_paye
 
 
 @pytest.fixture
 def ruleset():
-    """Get current ruleset for testing."""
-    return get_current_ruleset()
+    """Use the workbook-backed 2025/26 ruleset for stable expectations."""
+    return get_ruleset("ZA_2025_26_v1")
 
 
 def _round_money(value: Decimal) -> Decimal:
@@ -37,7 +37,9 @@ def _expected_paye_from_workbook(monthly_taxable: Decimal) -> tuple[Decimal, str
     for bracket in rules["brackets"]:
         bracket_min = Decimal(str(bracket["from_amount"]))
         bracket_max = Decimal(str(bracket["to_amount"]))
-        if annual_taxable >= bracket_min and annual_taxable <= bracket_max:
+        base_tax = Decimal(str(bracket["base_tax"]))
+        threshold = Decimal("0") if base_tax == 0 else bracket_min - Decimal("1")
+        if annual_taxable > threshold and annual_taxable <= bracket_max:
             selected = bracket
             break
 
@@ -45,7 +47,9 @@ def _expected_paye_from_workbook(monthly_taxable: Decimal) -> tuple[Decimal, str
 
     base_tax = Decimal(str(selected["base_tax"]))
     rate = Decimal(str(selected["marginal_rate"]))
-    annual_tax_before_rebate = base_tax + ((annual_taxable - Decimal(str(selected["from_amount"]))) * rate)
+    bracket_min = Decimal(str(selected["from_amount"]))
+    threshold = Decimal("0") if base_tax == 0 else bracket_min - Decimal("1")
+    annual_tax_before_rebate = base_tax + ((annual_taxable - threshold) * rate)
 
     primary_rebate = Decimal(str(rules["rebates"]["primary"]))
     annual_tax_after_rebate = annual_tax_before_rebate - primary_rebate

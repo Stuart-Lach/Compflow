@@ -8,8 +8,7 @@ All calculations are deterministic and based on the ruleset data.
 """
 
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Tuple
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.domain.models import (
     EmployeeResult,
@@ -27,13 +26,13 @@ class CalculationResult:
     Complete calculation result including per-employee results and totals.
     """
 
-    employee_results: List[EmployeeResult]
+    employee_results: list[EmployeeResult]
     totals: RunTotals
     ruleset_version_used: str
 
 
 def calculate_compliance_run(
-    rows: List[PayrollInputRow],
+    rows: list[PayrollInputRow],
     ruleset: RulesetInfo,
 ) -> CalculationResult:
     """
@@ -107,12 +106,7 @@ def calculate_employee(
         sdl = Decimal("0")
 
     # Calculate net pay (gross - PAYE - UIF employee - post-tax deductions)
-    net_pay = (
-        gross_income
-        - paye
-        - uif_employee
-        - row.post_tax_deductions
-    )
+    net_pay = gross_income - paye - uif_employee - row.post_tax_deductions
 
     # Ensure net pay is not negative
     if net_pay < 0:
@@ -174,11 +168,17 @@ def calculate_paye(
     annual_tax = Decimal("0")
 
     for bracket in brackets:
+        # SARS bracket rows are expressed as whole-rand inclusive ranges
+        # (for example 245101-383100) while the formula is tax on the amount
+        # above the previous ceiling (245100). Using min_income directly
+        # under-calculates every bracket, including the first, by one rand of
+        # marginal tax and leaves a gap for fractional annual income.
+        threshold = Decimal("0") if bracket.base_tax == 0 else bracket.min_income - Decimal("1")
         max_income = bracket.max_income
-        in_lower = annual_income >= bracket.min_income
+        in_lower = annual_income > threshold
         in_upper = max_income is None or annual_income <= max_income
         if in_lower and in_upper:
-            taxable_in_bracket = annual_income - bracket.min_income
+            taxable_in_bracket = annual_income - threshold
             annual_tax = bracket.base_tax + (taxable_in_bracket * bracket.rate)
             break
 
@@ -192,7 +192,7 @@ def calculate_paye(
 def calculate_uif(
     gross_income: Decimal,
     ruleset: RulesetInfo,
-) -> Tuple[Decimal, Decimal]:
+) -> tuple[Decimal, Decimal]:
     """
     Calculate UIF (Unemployment Insurance Fund) contributions.
 
@@ -236,7 +236,7 @@ def calculate_sdl(
     return _round_currency(gross_income * sdl_rate)
 
 
-def calculate_totals(results: List[EmployeeResult]) -> RunTotals:
+def calculate_totals(results: list[EmployeeResult]) -> RunTotals:
     """
     Calculate aggregated totals from employee results.
 
@@ -252,14 +252,16 @@ def calculate_totals(results: List[EmployeeResult]) -> RunTotals:
     return RunTotals(
         employee_count=len(results),
         # Sum already-rounded employee values, then round the total
-        total_gross=_round_currency(sum(r.gross_income for r in results)),
-        total_taxable=_round_currency(sum(r.taxable_income for r in results)),
-        total_paye=_round_currency(sum(r.paye for r in results)),
-        total_uif_employee=_round_currency(sum(r.uif_employee for r in results)),
-        total_uif_employer=_round_currency(sum(r.uif_employer for r in results)),
-        total_sdl=_round_currency(sum(r.sdl for r in results)),
-        total_net_pay=_round_currency(sum(r.net_pay for r in results)),
-        total_employer_cost=_round_currency(sum(r.total_employer_cost for r in results)),
+        total_gross=_round_currency(sum((r.gross_income for r in results), Decimal("0"))),
+        total_taxable=_round_currency(sum((r.taxable_income for r in results), Decimal("0"))),
+        total_paye=_round_currency(sum((r.paye for r in results), Decimal("0"))),
+        total_uif_employee=_round_currency(sum((r.uif_employee for r in results), Decimal("0"))),
+        total_uif_employer=_round_currency(sum((r.uif_employer for r in results), Decimal("0"))),
+        total_sdl=_round_currency(sum((r.sdl for r in results), Decimal("0"))),
+        total_net_pay=_round_currency(sum((r.net_pay for r in results), Decimal("0"))),
+        total_employer_cost=_round_currency(
+            sum((r.total_employer_cost for r in results), Decimal("0"))
+        ),
     )
 
 

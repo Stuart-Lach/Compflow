@@ -4,7 +4,7 @@ Write-Host "🔥 Starting smoke test..." -ForegroundColor Cyan
 
 # Start server in background
 Write-Host "📡 Starting uvicorn server..." -ForegroundColor Yellow
-$process = Start-Process -FilePath "uvicorn" -ArgumentList "src.app.main:app --host 0.0.0.0 --port 8000" -PassThru -NoNewWindow
+$process = Start-Process -FilePath "uvicorn" -ArgumentList "app.main:app --host 0.0.0.0 --port 8000" -PassThru -WindowStyle Hidden
 
 # Wait for server to start
 Write-Host "⏳ Waiting for server to be ready..." -ForegroundColor Yellow
@@ -16,7 +16,7 @@ try {
     $healthResponse = Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
     Write-Host "Response: $($healthResponse | ConvertTo-Json)" -ForegroundColor Gray
 
-    if ($healthResponse.status -eq "healthy") {
+    if ($healthResponse.status -eq "ok") {
         Write-Host "✅ Health check passed!" -ForegroundColor Green
     } else {
         Write-Host "❌ Health check failed!" -ForegroundColor Red

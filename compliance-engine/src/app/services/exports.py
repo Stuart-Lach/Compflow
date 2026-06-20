@@ -5,19 +5,25 @@ Generates CSV and PDF exports from stored run results.
 """
 
 import io
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import (
+    Flowable,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.storage.db import RunRecord, ResultRecord
+from app.storage.db import ResultRecord, RunRecord
 
 
 async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> bytes:
@@ -42,9 +48,7 @@ async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> by
 
     if not results:
         # Check if run exists
-        run_result = await session.execute(
-            select(RunRecord).where(RunRecord.id == run_id)
-        )
+        run_result = await session.execute(select(RunRecord).where(RunRecord.id == run_id))
         run = run_result.scalar_one_or_none()
         if not run:
             raise ValueError(f"Run not found: {run_id}")
@@ -55,7 +59,9 @@ async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> by
     output = io.StringIO()
 
     # Write header
-    output.write("employee_id,gross_income,taxable_income,paye,uif_employee,uif_employer,sdl,net_pay,total_employer_cost\n")
+    output.write(
+        "employee_id,gross_income,taxable_income,paye,uif_employee,uif_employer,sdl,net_pay,total_employer_cost\n"
+    )
 
     # Write data rows
     for record in results:
@@ -71,7 +77,7 @@ async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> by
             f"{record.total_employer_cost}\n"
         )
 
-    return output.getvalue().encode('utf-8')
+    return output.getvalue().encode("utf-8")
 
 
 async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
@@ -89,9 +95,7 @@ async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
         ValueError: If run not found.
     """
     # Get run record
-    result = await session.execute(
-        select(RunRecord).where(RunRecord.id == run_id)
-    )
+    result = await session.execute(select(RunRecord).where(RunRecord.id == run_id))
     run = result.scalar_one_or_none()
 
     if not run:
@@ -102,24 +106,24 @@ async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
     doc = SimpleDocTemplate(buffer, pagesize=letter)
 
     # Container for PDF elements
-    elements = []
+    elements: list[Flowable] = []
 
     # Styles
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
+        "CustomTitle",
+        parent=styles["Heading1"],
         fontSize=24,
-        textColor=colors.HexColor('#2c3e50'),
+        textColor=colors.HexColor("#2c3e50"),
         spaceAfter=30,
         alignment=1,  # Center
     )
 
     heading_style = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
+        "CustomHeading",
+        parent=styles["Heading2"],
         fontSize=14,
-        textColor=colors.HexColor('#34495e'),
+        textColor=colors.HexColor("#34495e"),
         spaceAfter=12,
     )
 
@@ -143,18 +147,22 @@ async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
     ]
 
     metadata_table = Table(metadata_data, colWidths=[2 * inch, 4 * inch])
-    metadata_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#ecf0f1')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2c3e50')),
-        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bdc3c7')),
-    ]))
+    metadata_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#ecf0f1")),
+                ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#2c3e50")),
+                ("ALIGN", (0, 0), (0, -1), "RIGHT"),
+                ("ALIGN", (1, 0), (1, -1), "LEFT"),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdc3c7")),
+            ]
+        )
+    )
 
     elements.append(metadata_table)
     elements.append(Spacer(1, 0.4 * inch))
@@ -163,14 +171,14 @@ async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
     totals_heading = Paragraph("Financial Totals", heading_style)
     elements.append(totals_heading)
 
-    def format_currency(value: Optional[str]) -> str:
+    def format_currency(value: str | None) -> str:
         """Format currency with R prefix and 2 decimals."""
         if value is None:
             return "R0.00"
         try:
             decimal_val = Decimal(value)
             return f"R{decimal_val:,.2f}"
-        except:
+        except (ValueError, TypeError):
             return "R0.00"
 
     totals_data = [
@@ -185,36 +193,40 @@ async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
     ]
 
     totals_table = Table(totals_data, colWidths=[2.5 * inch, 3.5 * inch])
-    totals_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#ecf0f1')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2c3e50')),
-        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bdc3c7')),
-        # Highlight total employer cost
-        ('BACKGROUND', (-2, -1), (-1, -1), colors.HexColor('#3498db')),
-        ('TEXTCOLOR', (-2, -1), (-1, -1), colors.white),
-        ('FONTNAME', (-2, -1), (-1, -1), 'Helvetica-Bold'),
-    ]))
+    totals_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#ecf0f1")),
+                ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#2c3e50")),
+                ("ALIGN", (0, 0), (0, -1), "RIGHT"),
+                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdc3c7")),
+                # Highlight total employer cost
+                ("BACKGROUND", (-2, -1), (-1, -1), colors.HexColor("#3498db")),
+                ("TEXTCOLOR", (-2, -1), (-1, -1), colors.white),
+                ("FONTNAME", (-2, -1), (-1, -1), "Helvetica-Bold"),
+            ]
+        )
+    )
 
     elements.append(totals_table)
     elements.append(Spacer(1, 0.5 * inch))
 
     # Footer
     footer_text = (
-        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}<br/>"
+        f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}<br/>"
         f"Ruleset: {run.ruleset_version_used}"
     )
     footer_style = ParagraphStyle(
-        'Footer',
-        parent=styles['Normal'],
+        "Footer",
+        parent=styles["Normal"],
         fontSize=8,
-        textColor=colors.HexColor('#7f8c8d'),
+        textColor=colors.HexColor("#7f8c8d"),
         alignment=1,  # Center
     )
     footer = Paragraph(footer_text, footer_style)

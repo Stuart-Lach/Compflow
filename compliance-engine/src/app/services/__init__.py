@@ -10,8 +10,8 @@ from app.services.calculation import (
     calculate_uif,
 )
 from app.services.evidence import (
-    IEvidenceRepository,
     EvidenceRepository,
+    IEvidenceRepository,
     create_compliance_run,
     generate_results_csv,
     generate_run_id,
@@ -22,15 +22,15 @@ from app.services.evidence import (
     set_evidence_repository,
     store_raw_file,
 )
-from app.services.ingestion import parse_csv, parse_csv_with_issues, RunContext
+from app.services.ingestion import RunContext, parse_csv, parse_csv_with_issues
 from app.services.validation import (
+    ValidationIssue,
+    filter_errors,
+    get_valid_row_indices,
+    has_errors,
     is_sdl_liable,
     is_uif_applicable,
     validate_rows,
-    ValidationIssue,
-    filter_errors,
-    has_errors,
-    get_valid_row_indices,
 )
 
 __all__ = [
@@ -56,6 +56,7 @@ __all__ = [
     "store_raw_file",
     # Ingestion
     "parse_csv",
+    "parse_csv_with_issues",
     "RunContext",
     # Validation
     "is_sdl_liable",
@@ -66,4 +67,3 @@ __all__ = [
     "has_errors",
     "get_valid_row_indices",
 ]
-

@@ -2,9 +2,10 @@
 Tests for export services and endpoints.
 """
 
-import pytest
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from datetime import date
+
+import pytest
 
 from app.domain.models import (
     ComplianceRun,
@@ -20,8 +21,6 @@ from app.storage.repo_runs import RunRepository
 @pytest.fixture
 async def sample_run_with_results(db_session):
     """Create a sample compliance run with results."""
-    from datetime import datetime
-
     run = ComplianceRun(
         run_id="TEST_RUN_001",
         payroll_run_id="PAYROLL_2025_001",
@@ -31,7 +30,7 @@ async def sample_run_with_results(db_session):
         payroll_frequency=PayrollFrequency.MONTHLY,
         ruleset_version_used="ZA_2025_26_v1",
         status=RunStatus.COMPLETED,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
         results=[
             EmployeeResult(
                 employee_id="EMP001",
@@ -83,13 +82,16 @@ async def test_build_employee_breakdown_csv(db_session, sample_run_with_results)
     run = sample_run_with_results
 
     csv_bytes = await build_employee_breakdown_csv(db_session, run.run_id)
-    csv_content = csv_bytes.decode('utf-8')
+    csv_content = csv_bytes.decode("utf-8")
 
     # Check header
-    assert "employee_id,gross_income,taxable_income,paye,uif_employee,uif_employer,sdl,net_pay,total_employer_cost" in csv_content
+    assert (
+        "employee_id,gross_income,taxable_income,paye,uif_employee,uif_employer,sdl,net_pay,total_employer_cost"
+        in csv_content
+    )
 
     # Check data rows
-    lines = csv_content.strip().split('\n')
+    lines = csv_content.strip().split("\n")
     assert len(lines) == 3  # Header + 2 data rows
 
     # Check first employee
@@ -120,13 +122,12 @@ async def test_build_summary_pdf(db_session, sample_run_with_results):
     pdf_bytes = await build_summary_pdf(db_session, run.run_id)
 
     # Check PDF signature
-    assert pdf_bytes.startswith(b'%PDF'), "PDF should start with %PDF signature"
+    assert pdf_bytes.startswith(b"%PDF"), "PDF should start with %PDF signature"
     assert len(pdf_bytes) > 1000, "PDF should have substantial content"
-    assert b'%%EOF' in pdf_bytes, "PDF should have EOF marker"
+    assert b"%%EOF" in pdf_bytes, "PDF should have EOF marker"
 
     # Check PDF contains ReportLab metadata
-    assert b'ReportLab' in pdf_bytes
-
+    assert b"ReportLab" in pdf_bytes
 
 
 @pytest.mark.asyncio
@@ -148,7 +149,7 @@ async def test_export_csv_endpoint(client, db_session, sample_run_with_results):
     assert "attachment" in response.headers["content-disposition"]
     assert run.run_id in response.headers["content-disposition"]
 
-    content = response.content.decode('utf-8')
+    content = response.content.decode("utf-8")
     assert "employee_id" in content
     assert "EMP001" in content
     assert "EMP002" in content
@@ -176,7 +177,7 @@ async def test_export_pdf_endpoint(client, db_session, sample_run_with_results):
     assert run.run_id in response.headers["content-disposition"]
 
     # Check PDF signature
-    assert response.content.startswith(b'%PDF')
+    assert response.content.startswith(b"%PDF")
     assert len(response.content) > 1000
 
 
@@ -195,22 +196,22 @@ async def test_csv_format_correctness(db_session, sample_run_with_results):
     run = sample_run_with_results
 
     csv_bytes = await build_employee_breakdown_csv(db_session, run.run_id)
-    csv_content = csv_bytes.decode('utf-8')
+    csv_content = csv_bytes.decode("utf-8")
 
-    lines = csv_content.strip().split('\n')
+    lines = csv_content.strip().split("\n")
 
     # Check each line has 9 columns
     for line in lines:
-        columns = line.split(',')
+        columns = line.split(",")
         assert len(columns) == 9, f"Expected 9 columns, got {len(columns)}"
 
     # Check decimal precision (all currency values should have .XX format)
     for line in lines[1:]:  # Skip header
-        columns = line.split(',')
+        columns = line.split(",")
         for i in range(1, 9):  # All columns except employee_id are currency
             value = columns[i]
-            assert '.' in value, f"Currency value should have decimal point: {value}"
-            decimal_part = value.split('.')[1]
+            assert "." in value, f"Currency value should have decimal point: {value}"
+            decimal_part = value.split(".")[1]
             assert len(decimal_part) == 2, f"Currency should have 2 decimal places: {value}"
 
 
@@ -222,13 +223,13 @@ async def test_pdf_contains_all_required_sections(db_session, sample_run_with_re
     pdf_bytes = await build_summary_pdf(db_session, run.run_id)
 
     # Check PDF structure
-    assert pdf_bytes.startswith(b'%PDF'), "PDF should have valid header"
-    assert b'%%EOF' in pdf_bytes, "PDF should have valid EOF"
+    assert pdf_bytes.startswith(b"%PDF"), "PDF should have valid header"
+    assert b"%%EOF" in pdf_bytes, "PDF should have valid EOF"
     assert len(pdf_bytes) > 2000, "PDF should have substantial content with all sections"
 
     # Check PDF was created with ReportLab
-    assert b'ReportLab' in pdf_bytes
+    assert b"ReportLab" in pdf_bytes
 
     # PDF should have multiple pages/objects for content
-    assert b'/Page' in pdf_bytes
-    assert b'/Font' in pdf_bytes
+    assert b"/Page" in pdf_bytes
+    assert b"/Font" in pdf_bytes

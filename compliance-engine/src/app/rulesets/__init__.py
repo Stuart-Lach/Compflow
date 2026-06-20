@@ -1,6 +1,6 @@
 """Rulesets package."""
 
-from app.rulesets import za_2025_26_v1
+from app.rulesets import za_2025_26_v1, za_2026_27_v1
 from app.rulesets.registry import (
     get_current_ruleset,
     get_ruleset,
@@ -14,6 +14,7 @@ from app.rulesets.registry import (
 
 __all__ = [
     "za_2025_26_v1",
+    "za_2026_27_v1",
     "get_current_ruleset",
     "get_ruleset",
     "get_sdl_config",
@@ -23,4 +24,3 @@ __all__ = [
     "list_rulesets",
     "select_ruleset_for_date",
 ]
-

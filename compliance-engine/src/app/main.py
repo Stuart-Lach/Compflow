@@ -5,13 +5,13 @@ API-first payroll compliance engine for South Africa.
 Validates and computes statutory payroll outputs (PAYE, UIF, SDL) before SARS submission.
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import routes_health, routes_runs, routes_rulesets, routes_exports
+from app.api.v1 import routes_exports, routes_health, routes_rulesets, routes_runs
 from app.config import settings
 from app.logging_config import setup_logging
 from app.storage.db import init_db
@@ -41,7 +41,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 # Include routers
@@ -60,3 +60,8 @@ async def root() -> dict:
         "docs": "/docs",
     }
 
+
+@app.get("/health")
+async def health() -> dict:
+    """Render-compatible health endpoint."""
+    return {"status": "ok"}

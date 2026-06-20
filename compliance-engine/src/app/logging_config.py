@@ -4,12 +4,11 @@ Logging configuration for the application.
 
 import logging
 import sys
-from typing import Optional
 
 from app.config import settings
 
 
-def setup_logging(level: Optional[str] = None) -> None:
+def setup_logging(level: str | None = None) -> None:
     """
     Configure application logging.
 
@@ -48,4 +47,3 @@ def get_logger(name: str) -> logging.Logger:
         Configured logger instance.
     """
     return logging.getLogger(name)
-

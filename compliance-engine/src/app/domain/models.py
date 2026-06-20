@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional
 
 
 class PayrollFrequency(str, Enum):
@@ -76,12 +75,12 @@ class PayrollInputRow:
     basic_salary: Decimal
 
     # Optional context fields
-    annual_payroll_estimate: Optional[Decimal] = None
-    is_sdl_liable_override: Optional[bool] = None
-    ruleset_version_override: Optional[str] = None
+    annual_payroll_estimate: Decimal | None = None
+    is_sdl_liable_override: bool | None = None
+    ruleset_version_override: str | None = None
     residency_status: ResidencyStatus = ResidencyStatus.RESIDENT
-    employment_start_date: Optional[date] = None
-    employment_end_date: Optional[date] = None
+    employment_start_date: date | None = None
+    employment_end_date: date | None = None
 
     # Earnings (default to 0)
     overtime_pay: Decimal = Decimal("0")
@@ -140,12 +139,12 @@ class PayrollInputRow:
 class ValidationIssue:
     """Represents a validation error or warning."""
 
-    row_number: Optional[int]
-    employee_id: Optional[str]
+    row_number: int | None
+    employee_id: str | None
     severity: IssueSeverity
     code: str
     message: str
-    field: Optional[str] = None
+    field: str | None = None
 
 
 @dataclass
@@ -195,16 +194,16 @@ class ComplianceRun:
     ruleset_version_used: str
     status: RunStatus
     created_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
     # Results
-    results: List[EmployeeResult] = field(default_factory=list)
-    issues: List[ValidationIssue] = field(default_factory=list)
-    totals: Optional[RunTotals] = None
+    results: list[EmployeeResult] = field(default_factory=list)
+    issues: list[ValidationIssue] = field(default_factory=list)
+    totals: RunTotals | None = None
 
     # Evidence references
-    raw_file_id: Optional[str] = None
-    normalized_rows_id: Optional[str] = None
+    raw_file_id: str | None = None
+    normalized_rows_id: str | None = None
 
     @property
     def error_count(self) -> int:
@@ -215,4 +214,3 @@ class ComplianceRun:
     def warning_count(self) -> int:
         """Count of warning-level issues."""
         return sum(1 for i in self.issues if i.severity == IssueSeverity.WARNING)
-

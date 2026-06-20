@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.domain.models import EmploymentType, IssueSeverity, PayrollFrequency
+from app.domain.models import EmploymentType, PayrollFrequency
 from app.errors import SchemaValidationError
 from app.services.ingestion import parse_csv, parse_csv_with_issues
 
@@ -179,7 +179,3 @@ RUN001,COMP001,2025-03-25,2025_26,monthly,,,
         assert issue.row_index >= 0  # 0-based index
         assert "Row" in issue.message
         assert "Raw data:" in issue.message  # Raw row included in message
-
-
-
-

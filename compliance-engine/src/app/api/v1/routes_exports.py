@@ -8,18 +8,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.security import require_api_key
 from app.services.exports import build_employee_breakdown_csv, build_summary_pdf
 from app.storage.db import get_session
 
-
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
 @router.get("/runs/{run_id}/export/employee-breakdown.csv")
 async def export_employee_breakdown_csv(
     run_id: str,
     session: AsyncSession = Depends(get_session),
-):
+) -> StreamingResponse:
     """
     Export employee breakdown as CSV.
 
@@ -39,16 +39,14 @@ async def export_employee_breakdown_csv(
     try:
         csv_bytes = await build_employee_breakdown_csv(session, run_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     filename = f"employee_breakdown_{run_id}.csv"
 
     return StreamingResponse(
         iter([csv_bytes]),
         media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -56,7 +54,7 @@ async def export_employee_breakdown_csv(
 async def export_summary_pdf(
     run_id: str,
     session: AsyncSession = Depends(get_session),
-):
+) -> StreamingResponse:
     """
     Export compliance summary as PDF.
 
@@ -72,14 +70,12 @@ async def export_summary_pdf(
     try:
         pdf_bytes = await build_summary_pdf(session, run_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     filename = f"compliance_summary_{run_id}.pdf"
 
     return StreamingResponse(
         iter([pdf_bytes]),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

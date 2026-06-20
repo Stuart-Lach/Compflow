@@ -2,20 +2,20 @@
 Tests for UIF calculation.
 """
 
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
-from app.rulesets.registry import get_current_ruleset
 from app.domain.models import EmploymentType, PayrollFrequency, PayrollInputRow
+from app.rulesets.registry import get_ruleset
 from app.services.calculation import calculate_employee, calculate_uif
 
 
 @pytest.fixture
 def ruleset():
-    """Get current ruleset for testing."""
-    return get_current_ruleset()
+    """Use a fixed ruleset so the test is independent of today's date."""
+    return get_ruleset("ZA_2025_26_v1")
 
 
 def test_calculate_uif_normal_income(ruleset):

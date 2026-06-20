@@ -17,7 +17,7 @@ import logging
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from app.domain.models import (
     EmploymentType,
@@ -26,7 +26,6 @@ from app.domain.models import (
     ResidencyStatus,
 )
 from app.errors import SchemaValidationError
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +42,9 @@ class RunContext:
     pay_date: date
     tax_year: str
     payroll_frequency: PayrollFrequency
-    ruleset_version_override: Optional[str] = None
-    annual_payroll_estimate: Optional[Decimal] = None
-    is_sdl_liable_override: Optional[bool] = None
+    ruleset_version_override: str | None = None
+    annual_payroll_estimate: Decimal | None = None
+    is_sdl_liable_override: bool | None = None
 
 
 # Required columns that must be present in every CSV
@@ -85,7 +84,7 @@ VALID_COLUMNS = REQUIRED_COLUMNS + [
 ]
 
 
-def parse_csv(content: bytes) -> Tuple[List[PayrollInputRow], RunContext]:
+def parse_csv(content: bytes) -> tuple[list[PayrollInputRow], RunContext]:
     """
     Parse CSV content into PayrollInputRow objects and extract run context.
 
@@ -105,7 +104,7 @@ def parse_csv(content: bytes) -> Tuple[List[PayrollInputRow], RunContext]:
     return rows, run_context
 
 
-def parse_csv_with_issues(content: bytes) -> Tuple[List[PayrollInputRow], RunContext, List]:
+def parse_csv_with_issues(content: bytes) -> tuple[list[PayrollInputRow], RunContext, list]:
     """
     Parse CSV content into PayrollInputRow objects and extract run context.
 
@@ -130,10 +129,10 @@ def parse_csv_with_issues(content: bytes) -> Tuple[List[PayrollInputRow], RunCon
     except UnicodeDecodeError:
         try:
             text = content.decode("latin-1")
-        except UnicodeDecodeError:
+        except UnicodeDecodeError as exc:
             raise SchemaValidationError(
                 "Unable to decode CSV file. Please use UTF-8 or Latin-1 encoding."
-            )
+            ) from exc
 
     # Parse CSV
     reader = csv.DictReader(io.StringIO(text))
@@ -152,7 +151,7 @@ def parse_csv_with_issues(content: bytes) -> Tuple[List[PayrollInputRow], RunCon
         )
 
     # Parse all rows first
-    rows: List[PayrollInputRow] = []
+    rows: list[PayrollInputRow] = []
     raw_rows = list(reader)
 
     if not raw_rows:
@@ -182,6 +181,7 @@ def parse_csv_with_issues(content: bytes) -> Tuple[List[PayrollInputRow], RunCon
                 # _parse_row returned None - critical field missing
                 # Record as evidence with parse error
                 from app.services.validation import ValidationIssue
+
                 parse_issues.append(
                     ValidationIssue(
                         code="ROW_PARSE_ERROR",
@@ -196,6 +196,7 @@ def parse_csv_with_issues(content: bytes) -> Tuple[List[PayrollInputRow], RunCon
             # Parse exception - record the failure as structured evidence
             # DO NOT silently drop - user must see what failed
             from app.services.validation import ValidationIssue
+
             parse_issues.append(
                 ValidationIssue(
                     code="ROW_PARSE_ERROR",
@@ -211,7 +212,7 @@ def parse_csv_with_issues(content: bytes) -> Tuple[List[PayrollInputRow], RunCon
     return rows, run_context, parse_issues
 
 
-def _extract_run_context(first_row: Dict[str, str]) -> RunContext:
+def _extract_run_context(first_row: dict[str, str]) -> RunContext:
     """
     Extract run context from the first row of the CSV.
 
@@ -230,20 +231,20 @@ def _extract_run_context(first_row: Dict[str, str]) -> RunContext:
     pay_date_str = first_row.get("pay_date", "")
     try:
         pay_date = date.fromisoformat(pay_date_str)
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError) as exc:
         raise SchemaValidationError(
             f"Invalid pay_date in first row: '{pay_date_str}'. Expected YYYY-MM-DD format."
-        )
+        ) from exc
 
     # Extract and validate payroll_frequency
     freq_str = first_row.get("payroll_frequency", "").lower()
     try:
         payroll_frequency = PayrollFrequency(freq_str)
-    except ValueError:
+    except ValueError as exc:
         raise SchemaValidationError(
             f"Invalid payroll_frequency in first row: '{freq_str}'. "
             f"Expected: {', '.join(e.value for e in PayrollFrequency)}"
-        )
+        ) from exc
 
     # Extract optional run-level fields
     annual_payroll_estimate = None
@@ -270,7 +271,7 @@ def _extract_run_context(first_row: Dict[str, str]) -> RunContext:
     )
 
 
-def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
+def _parse_row(row: dict[str, str], row_num: int) -> PayrollInputRow | None:
     """
     Parse a single CSV row into a PayrollInputRow.
 
@@ -294,7 +295,9 @@ def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
     # Parse pay_date (required) - use today as fallback to avoid dropping row
     pay_date = _parse_date(row.get("pay_date", ""))
     if pay_date is None:
-        logger.warning(f"Row {row_num}: Invalid pay_date, using today as fallback. Validation will flag this.")
+        logger.warning(
+            f"Row {row_num}: Invalid pay_date, using today as fallback. Validation will flag this."
+        )
         pay_date = date.today()  # Fallback to avoid dropping row
 
     tax_year = row.get("tax_year", "")
@@ -305,7 +308,9 @@ def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
         PayrollFrequency,
     )
     if payroll_frequency is None:
-        logger.warning(f"Row {row_num}: Invalid payroll_frequency, using MONTHLY as fallback. Validation will flag this.")
+        logger.warning(
+            f"Row {row_num}: Invalid payroll_frequency, using MONTHLY as fallback. Validation will flag this."
+        )
         payroll_frequency = PayrollFrequency.MONTHLY  # Fallback to avoid dropping row
 
     # Parse employment_type (required) - use EMPLOYEE as fallback
@@ -314,7 +319,9 @@ def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
         EmploymentType,
     )
     if employment_type is None:
-        logger.warning(f"Row {row_num}: Invalid employment_type, using EMPLOYEE as fallback. Validation will flag this.")
+        logger.warning(
+            f"Row {row_num}: Invalid employment_type, using EMPLOYEE as fallback. Validation will flag this."
+        )
         employment_type = EmploymentType.EMPLOYEE  # Fallback to avoid dropping row
 
     # Parse basic_salary (required) - validation will flag if <= 0
@@ -322,10 +329,13 @@ def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
     # Don't return None here - let validation handle it
 
     # Parse optional fields with defaults
-    residency_status = _parse_enum(
-        row.get("residency_status", "resident"),
-        ResidencyStatus,
-    ) or ResidencyStatus.RESIDENT
+    residency_status = (
+        _parse_enum(
+            row.get("residency_status", "resident"),
+            ResidencyStatus,
+        )
+        or ResidencyStatus.RESIDENT
+    )
 
     employment_start_date = _parse_date(row.get("employment_start_date", ""))
     employment_end_date = _parse_date(row.get("employment_end_date", ""))
@@ -345,9 +355,15 @@ def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
     fringe_benefits_taxable = _parse_money_with_default(row.get("fringe_benefits_taxable", ""))
     reimbursements = _parse_money_with_default(row.get("reimbursements", ""))
     other_earnings = _parse_money_with_default(row.get("other_earnings", ""))
-    pension_contribution_employee = _parse_money_with_default(row.get("pension_contribution_employee", ""))
-    retirement_annuity_employee = _parse_money_with_default(row.get("retirement_annuity_employee", ""))
-    medical_aid_contribution_employee = _parse_money_with_default(row.get("medical_aid_contribution_employee", ""))
+    pension_contribution_employee = _parse_money_with_default(
+        row.get("pension_contribution_employee", "")
+    )
+    retirement_annuity_employee = _parse_money_with_default(
+        row.get("retirement_annuity_employee", "")
+    )
+    medical_aid_contribution_employee = _parse_money_with_default(
+        row.get("medical_aid_contribution_employee", "")
+    )
     other_pre_tax_deductions = _parse_money_with_default(row.get("other_pre_tax_deductions", ""))
     union_fees = _parse_money_with_default(row.get("union_fees", ""))
     garnishees = _parse_money_with_default(row.get("garnishees", ""))
@@ -395,7 +411,7 @@ def _parse_row(row: Dict[str, str], row_num: int) -> Optional[PayrollInputRow]:
 # ============================================================================
 
 
-def _parse_date(value: str) -> Optional[date]:
+def _parse_date(value: str) -> date | None:
     """Parse a date string in YYYY-MM-DD format."""
     if not value:
         return None
@@ -405,7 +421,7 @@ def _parse_date(value: str) -> Optional[date]:
         return None
 
 
-def _parse_enum(value: str, enum_class: type) -> Optional[Any]:
+def _parse_enum(value: str, enum_class: type) -> Any | None:
     """Parse an enum value."""
     if not value:
         return None
@@ -444,7 +460,7 @@ def _parse_money_with_default(value: str) -> Decimal:
         return Decimal("0")
 
 
-def _parse_bool(value: str) -> Optional[bool]:
+def _parse_bool(value: str) -> bool | None:
     """Parse a boolean value."""
     if not value:
         return None
@@ -454,4 +470,3 @@ def _parse_bool(value: str) -> Optional[bool]:
     if lower in ("false", "no", "0"):
         return False
     return None
-

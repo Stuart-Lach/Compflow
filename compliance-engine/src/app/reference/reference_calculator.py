@@ -6,9 +6,9 @@ This module is intentionally independent of app.services.calculation.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Iterable, Optional
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.domain.models import EmploymentType, PayrollFrequency, PayrollInputRow
 
@@ -16,7 +16,7 @@ from app.domain.models import EmploymentType, PayrollFrequency, PayrollInputRow
 @dataclass(frozen=True)
 class TaxBracket:
     min_income: Decimal
-    max_income: Optional[Decimal]
+    max_income: Decimal | None
     base_tax: Decimal
     rate: Decimal
 
@@ -152,10 +152,11 @@ def _calculate_paye(
 
     annual_tax = Decimal("0")
     for bracket in ruleset.brackets:
-        in_lower = annual_income >= bracket.min_income
+        threshold = Decimal("0") if bracket.base_tax == 0 else bracket.min_income - Decimal("1")
+        in_lower = annual_income > threshold
         in_upper = bracket.max_income is None or annual_income <= bracket.max_income
         if in_lower and in_upper:
-            annual_tax = bracket.base_tax + ((annual_income - bracket.min_income) * bracket.rate)
+            annual_tax = bracket.base_tax + ((annual_income - threshold) * bracket.rate)
             break
 
     annual_tax = annual_tax - ruleset.primary_rebate

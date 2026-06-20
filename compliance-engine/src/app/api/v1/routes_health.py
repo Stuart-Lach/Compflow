@@ -2,7 +2,7 @@
 Health check endpoints.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
@@ -29,6 +29,5 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="healthy",
         current_ruleset=ruleset_id,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
-

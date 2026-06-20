@@ -4,10 +4,9 @@ Pydantic schemas for API request/response validation.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from pydantic import BaseModel, ConfigDict
 
 # ============================================================================
 # Common Schemas
@@ -61,21 +60,21 @@ class RulesetMetadata(BaseModel):
     ruleset_id: str
     description: str
     effective_from: date
-    effective_to: Optional[date]
+    effective_to: date | None
     is_current: bool
 
 
 class RulesetListResponse(BaseModel):
     """Response for listing rulesets."""
 
-    rulesets: List[RulesetMetadata]
+    rulesets: list[RulesetMetadata]
 
 
 class TaxBracket(BaseModel):
     """Tax bracket definition."""
 
     min_income: Decimal
-    max_income: Optional[Decimal]
+    max_income: Decimal | None
     rate: Decimal
     base_tax: Decimal
 
@@ -86,9 +85,9 @@ class RulesetDetailResponse(BaseModel):
     ruleset_id: str
     description: str
     effective_from: date
-    effective_to: Optional[date]
+    effective_to: date | None
     is_current: bool
-    tax_brackets: List[TaxBracket]
+    tax_brackets: list[TaxBracket]
     uif_rate_employee: Decimal
     uif_rate_employer: Decimal
     uif_monthly_cap: Decimal
@@ -104,12 +103,12 @@ class RulesetDetailResponse(BaseModel):
 class ValidationIssueResponse(BaseModel):
     """Validation issue in response."""
 
-    row: Optional[int]
-    employee_id: Optional[str]
+    row: int | None
+    employee_id: str | None
     severity: str
     code: str
     message: str
-    field: Optional[str] = None
+    field: str | None = None
 
 
 class EmployeeResultResponse(BaseModel):
@@ -137,7 +136,7 @@ class RunCreateResponse(BaseModel):
     ruleset_version_used: str
     created_at: datetime
     issue_count: IssueCount
-    totals: Optional[Totals] = None
+    totals: Totals | None = None
 
 
 class RunDetailResponse(BaseModel):
@@ -152,9 +151,9 @@ class RunDetailResponse(BaseModel):
     ruleset_version_used: str
     status: str
     created_at: datetime
-    completed_at: Optional[datetime]
+    completed_at: datetime | None
     issue_count: IssueCount
-    totals: Optional[Totals] = None
+    totals: Totals | None = None
 
 
 class RunResultsResponse(BaseModel):
@@ -163,8 +162,8 @@ class RunResultsResponse(BaseModel):
     run_id: str
     payroll_run_id: str  # From CSV input
     ruleset_version_used: str  # For auditability
-    results: List[EmployeeResultResponse]
-    totals: Optional[Totals] = None
+    results: list[EmployeeResultResponse]
+    totals: Totals | None = None
 
 
 class RunErrorsResponse(BaseModel):
@@ -172,7 +171,7 @@ class RunErrorsResponse(BaseModel):
 
     run_id: str
     payroll_run_id: str  # From CSV input
-    issues: List[ValidationIssueResponse]
+    issues: list[ValidationIssueResponse]
 
 
 # ============================================================================
@@ -185,5 +184,4 @@ class ErrorResponse(BaseModel):
 
     error: str
     message: str
-    details: Optional[Dict[str, Any]] = None
-
+    details: dict[str, Any] | None = None

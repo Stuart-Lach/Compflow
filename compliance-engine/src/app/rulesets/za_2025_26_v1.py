@@ -19,7 +19,6 @@ Sources:
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
 
 
 @dataclass(frozen=True)
@@ -27,7 +26,7 @@ class TaxBracket:
     """Immutable tax bracket definition."""
 
     min_income: Decimal
-    max_income: Optional[Decimal]  # None = no upper limit
+    max_income: Decimal | None  # None = no upper limit
     rate: Decimal  # e.g., 0.18 for 18%
     base_tax: Decimal  # Tax on income below this bracket
 
@@ -50,7 +49,7 @@ EFFECTIVE_TO = date(2026, 2, 28)
 # Source: Extracted from sa_payroll_workbook.xlsx on 2026-01-27
 # These are the official SARS 2025/26 values as confirmed in the workbook
 
-TAX_BRACKETS_ANNUAL: List[TaxBracket] = [
+TAX_BRACKETS_ANNUAL: list[TaxBracket] = [
     TaxBracket(
         min_income=Decimal("1"),  # Workbook shows 1 instead of 0
         max_income=Decimal("237100"),
@@ -141,7 +140,7 @@ SDL_ANNUAL_PAYROLL_THRESHOLD = Decimal("500000")  # R500,000 annual payroll thre
 # ============================================================================
 
 
-def get_monthly_tax_brackets() -> List[TaxBracket]:
+def get_monthly_tax_brackets() -> list[TaxBracket]:
     """
     Convert annual tax brackets to monthly equivalents.
 

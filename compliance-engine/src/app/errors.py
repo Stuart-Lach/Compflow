@@ -2,13 +2,13 @@
 Custom exception classes for the Compliance Engine.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class ComplianceEngineError(Exception):
     """Base exception for all compliance engine errors."""
 
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.message = message
         self.details = details or {}
@@ -20,8 +20,8 @@ class ValidationError(ComplianceEngineError):
     def __init__(
         self,
         message: str,
-        errors: Optional[List[Dict[str, Any]]] = None,
-        details: Optional[Dict[str, Any]] = None,
+        errors: list[dict[str, Any]] | None = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message, details)
         self.errors = errors or []
@@ -67,4 +67,3 @@ class FileStorageError(StorageError):
     """Raised when file storage operations fail."""
 
     pass
-

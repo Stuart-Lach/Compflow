@@ -6,14 +6,14 @@ from decimal import Decimal
 
 import pytest
 
-from app.rulesets.registry import get_current_ruleset
+from app.rulesets.registry import get_ruleset
 from app.services.calculation import calculate_sdl
 
 
 @pytest.fixture
 def ruleset():
-    """Get current ruleset for testing."""
-    return get_current_ruleset()
+    """Use a fixed ruleset so the test is independent of today's date."""
+    return get_ruleset("ZA_2025_26_v1")
 
 
 def test_calculate_sdl_normal_income(ruleset):
@@ -86,4 +86,3 @@ def test_calculate_sdl_decimal_precision(ruleset):
 
     # Should be exactly 1% with proper rounding
     assert sdl == Decimal("123.46")  # Rounded to 2 decimal places
-

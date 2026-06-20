@@ -11,8 +11,6 @@ Severity levels:
 """
 
 from dataclasses import dataclass
-from decimal import Decimal
-from typing import List, Optional
 
 from app.domain.models import (
     EmploymentType,
@@ -31,16 +29,16 @@ class ValidationIssue:
 
     code: str
     severity: str  # "error", "warn", or "info"
-    field: Optional[str]
+    field: str | None
     row_index: int  # 0-based index, or -1 for run-level issues
     message: str
-    employee_id: Optional[str] = None  # For easier debugging
+    employee_id: str | None = None  # For easier debugging
 
 
 def validate_rows(
-    rows: List[PayrollInputRow],
+    rows: list[PayrollInputRow],
     ruleset: RulesetInfo,
-) -> List[ValidationIssue]:
+) -> list[ValidationIssue]:
     """
     Validate parsed payroll rows against business rules.
 
@@ -54,7 +52,7 @@ def validate_rows(
     Returns:
         List of ValidationIssue objects.
     """
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
 
     # Run-level validations (execute once per run, not per employee)
     run_level_issues = _validate_run_level(rows, ruleset)
@@ -69,9 +67,9 @@ def validate_rows(
 
 
 def _validate_run_level(
-    rows: List[PayrollInputRow],
+    rows: list[PayrollInputRow],
     ruleset: RulesetInfo,
-) -> List[ValidationIssue]:
+) -> list[ValidationIssue]:
     """
     Perform run-level validations that should execute once per payroll run.
 
@@ -85,7 +83,7 @@ def _validate_run_level(
     Returns:
         List of run-level ValidationIssue objects (row_index = -1).
     """
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
 
     if not rows:
         return issues
@@ -115,7 +113,7 @@ def _validate_row(
     row: PayrollInputRow,
     row_index: int,
     ruleset: RulesetInfo,
-) -> List[ValidationIssue]:
+) -> list[ValidationIssue]:
     """
     Validate a single row against business rules.
 
@@ -127,7 +125,7 @@ def _validate_row(
     Returns:
         List of validation issues for this row.
     """
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
 
     # Validate employee_id is present (may have been defaulted during parse)
     if not row.employee_id or row.employee_id.startswith("UNKNOWN_ROW_"):
@@ -225,7 +223,9 @@ def _validate_row(
                 )
             )
         # Note: SDL_ESTIMATE_MISSING is now a run-level validation, not per-employee
-        elif row.annual_payroll_estimate is not None and row.annual_payroll_estimate < sdl_threshold:
+        elif (
+            row.annual_payroll_estimate is not None and row.annual_payroll_estimate < sdl_threshold
+        ):
             issues.append(
                 ValidationIssue(
                     code="SDL_BELOW_THRESHOLD",
@@ -281,7 +281,7 @@ def is_uif_applicable(row: PayrollInputRow) -> bool:
     return row.employment_type == EmploymentType.EMPLOYEE
 
 
-def filter_errors(issues: List[ValidationIssue]) -> List[ValidationIssue]:
+def filter_errors(issues: list[ValidationIssue]) -> list[ValidationIssue]:
     """
     Filter to only error-level issues.
 
@@ -294,7 +294,7 @@ def filter_errors(issues: List[ValidationIssue]) -> List[ValidationIssue]:
     return [i for i in issues if i.severity == "error"]
 
 
-def has_errors(issues: List[ValidationIssue]) -> bool:
+def has_errors(issues: list[ValidationIssue]) -> bool:
     """
     Check if there are any error-level issues.
 
@@ -307,7 +307,7 @@ def has_errors(issues: List[ValidationIssue]) -> bool:
     return any(i.severity == "error" for i in issues)
 
 
-def get_valid_row_indices(rows: List[PayrollInputRow], issues: List[ValidationIssue]) -> List[int]:
+def get_valid_row_indices(rows: list[PayrollInputRow], issues: list[ValidationIssue]) -> list[int]:
     """
     Get indices of rows that have no errors.
 
@@ -320,4 +320,3 @@ def get_valid_row_indices(rows: List[PayrollInputRow], issues: List[ValidationIs
     """
     error_indices = {i.row_index for i in issues if i.severity == "error"}
     return [idx for idx in range(len(rows)) if idx not in error_indices]
-

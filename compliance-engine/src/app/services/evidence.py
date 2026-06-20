@@ -9,12 +9,9 @@ Uses repository pattern for storage abstraction - can be replaced with Postgres 
 
 import csv
 import io
-import json
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
-from decimal import Decimal
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from app.domain.models import (
     ComplianceRun,
@@ -22,9 +19,9 @@ from app.domain.models import (
     RunStatus,
     RunTotals,
 )
+from app.domain.models import ValidationIssue as DomainValidationIssue
 from app.services.ingestion import RunContext
 from app.services.validation import ValidationIssue
-
 
 # ============================================================================
 # Storage Interface (Abstract Base Class for Repository Pattern)
@@ -54,7 +51,7 @@ class IEvidenceRepository(ABC):
         pass
 
     @abstractmethod
-    async def retrieve_raw_file(self, file_id: str) -> Optional[bytes]:
+    async def retrieve_raw_file(self, file_id: str) -> bytes | None:
         """
         Retrieve stored raw file.
 
@@ -77,7 +74,7 @@ class IEvidenceRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_compliance_run(self, run_id: str) -> Optional[ComplianceRun]:
+    async def get_compliance_run(self, run_id: str) -> ComplianceRun | None:
         """
         Retrieve a compliance run by ID.
 
@@ -90,7 +87,7 @@ class IEvidenceRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_run_results(self, run_id: str) -> List[EmployeeResult]:
+    async def get_run_results(self, run_id: str) -> list[EmployeeResult]:
         """
         Retrieve results for a compliance run.
 
@@ -103,7 +100,7 @@ class IEvidenceRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_run_issues(self, run_id: str) -> List[ValidationIssue]:
+    async def get_run_issues(self, run_id: str) -> list[DomainValidationIssue]:
         """
         Retrieve validation issues for a compliance run.
 
@@ -129,11 +126,10 @@ class EvidenceRepository(IEvidenceRepository):
     the evidence interface. Can be replaced with PostgresEvidenceRepository later.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize with storage dependencies."""
-        from app.storage.repo_files import get_file_store
-        from app.storage.repo_runs import RunRepository
         from app.storage.db import async_session_maker
+        from app.storage.repo_files import get_file_store
 
         self._file_store = get_file_store()
         self._session_maker = async_session_maker
@@ -142,7 +138,7 @@ class EvidenceRepository(IEvidenceRepository):
         """Store raw uploaded CSV file."""
         return await self._file_store.store(content, filename, "text/csv")
 
-    async def retrieve_raw_file(self, file_id: str) -> Optional[bytes]:
+    async def retrieve_raw_file(self, file_id: str) -> bytes | None:
         """Retrieve stored raw file."""
         return await self._file_store.retrieve(file_id)
 
@@ -155,7 +151,7 @@ class EvidenceRepository(IEvidenceRepository):
             await repo.create_run(run)
             await session.commit()
 
-    async def get_compliance_run(self, run_id: str) -> Optional[ComplianceRun]:
+    async def get_compliance_run(self, run_id: str) -> ComplianceRun | None:
         """Retrieve a compliance run by ID."""
         async with self._session_maker() as session:
             from app.storage.repo_runs import RunRepository
@@ -163,7 +159,7 @@ class EvidenceRepository(IEvidenceRepository):
             repo = RunRepository(session)
             return await repo.get_run(run_id)
 
-    async def get_run_results(self, run_id: str) -> List[EmployeeResult]:
+    async def get_run_results(self, run_id: str) -> list[EmployeeResult]:
         """Retrieve results for a compliance run."""
         async with self._session_maker() as session:
             from app.storage.repo_runs import RunRepository
@@ -171,14 +167,12 @@ class EvidenceRepository(IEvidenceRepository):
             repo = RunRepository(session)
             return await repo.get_run_results(run_id)
 
-    async def get_run_issues(self, run_id: str) -> List[ValidationIssue]:
+    async def get_run_issues(self, run_id: str) -> list[DomainValidationIssue]:
         """Retrieve validation issues for a compliance run."""
         async with self._session_maker() as session:
             from app.storage.repo_runs import RunRepository
 
             repo = RunRepository(session)
-            # Note: This returns domain.models.ValidationIssue, not services.validation.ValidationIssue
-            # May need conversion
             return await repo.get_run_issues(run_id)
 
 
@@ -194,7 +188,7 @@ def generate_run_id() -> str:
     Returns:
         Unique run ID with timestamp and random component.
     """
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     unique_part = uuid.uuid4().hex[:8]
     return f"run_{timestamp}_{unique_part}"
 
@@ -202,11 +196,12 @@ def generate_run_id() -> str:
 def create_compliance_run(
     run_id: str,
     run_context: RunContext,
-    results: List[EmployeeResult],
-    issues: List[ValidationIssue],
-    totals: RunTotals,
+    results: list[EmployeeResult],
+    issues: list[ValidationIssue],
+    totals: RunTotals | None,
     ruleset_version_used: str,
-    raw_file_id: Optional[str] = None,
+    raw_file_id: str | None = None,
+    status: RunStatus = RunStatus.COMPLETED,
 ) -> ComplianceRun:
     """
     Create a ComplianceRun object with all evidence.
@@ -228,12 +223,14 @@ def create_compliance_run(
         totals: Aggregated totals.
         ruleset_version_used: Ruleset version ID used for calculations.
         raw_file_id: Reference to stored raw CSV file.
+        status: Final status assigned to the immutable run.
 
     Returns:
         ComplianceRun object ready for persistence.
     """
     # Convert services.validation.ValidationIssue to domain.models.ValidationIssue
-    from app.domain.models import ValidationIssue as DomainValidationIssue, IssueSeverity
+    from app.domain.models import IssueSeverity
+    from app.domain.models import ValidationIssue as DomainValidationIssue
 
     domain_issues = []
     for issue in issues:
@@ -246,7 +243,9 @@ def create_compliance_run(
 
         domain_issues.append(
             DomainValidationIssue(
-                row_number=issue.row_index + 2 if issue.row_index >= 0 else None,  # Convert 0-based to 1-based (header is row 1)
+                row_number=issue.row_index + 2
+                if issue.row_index >= 0
+                else None,  # Convert 0-based to 1-based (header is row 1)
                 employee_id=issue.employee_id,
                 severity=severity_map.get(issue.severity, IssueSeverity.WARNING),
                 code=issue.code,
@@ -263,9 +262,9 @@ def create_compliance_run(
         tax_year=run_context.tax_year,
         payroll_frequency=run_context.payroll_frequency,
         ruleset_version_used=ruleset_version_used,
-        status=RunStatus.COMPLETED,
-        created_at=datetime.utcnow(),
-        completed_at=datetime.utcnow(),
+        status=status,
+        created_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
         results=results,
         issues=domain_issues,
         totals=totals,
@@ -275,7 +274,7 @@ def create_compliance_run(
 
 async def persist_compliance_run(
     run: ComplianceRun,
-    repository: Optional[IEvidenceRepository] = None,
+    repository: IEvidenceRepository | None = None,
 ) -> None:
     """
     Persist a compliance run using the evidence repository.
@@ -303,7 +302,7 @@ async def persist_compliance_run(
 async def store_raw_file(
     content: bytes,
     filename: str,
-    repository: Optional[IEvidenceRepository] = None,
+    repository: IEvidenceRepository | None = None,
 ) -> str:
     """
     Store the raw uploaded CSV file.
@@ -324,8 +323,8 @@ async def store_raw_file(
 
 async def retrieve_raw_file(
     file_id: str,
-    repository: Optional[IEvidenceRepository] = None,
-) -> Optional[bytes]:
+    repository: IEvidenceRepository | None = None,
+) -> bytes | None:
     """
     Retrieve a stored raw CSV file.
 
@@ -344,8 +343,8 @@ async def retrieve_raw_file(
 
 async def get_compliance_run(
     run_id: str,
-    repository: Optional[IEvidenceRepository] = None,
-) -> Optional[ComplianceRun]:
+    repository: IEvidenceRepository | None = None,
+) -> ComplianceRun | None:
     """
     Retrieve a complete compliance run.
 
@@ -362,7 +361,7 @@ async def get_compliance_run(
     return await repository.get_compliance_run(run_id)
 
 
-def generate_results_csv(results: List[EmployeeResult]) -> bytes:
+def generate_results_csv(results: list[EmployeeResult]) -> bytes:
     """
     Generate a CSV export of employee results.
 
@@ -376,31 +375,35 @@ def generate_results_csv(results: List[EmployeeResult]) -> bytes:
     writer = csv.writer(output)
 
     # Header
-    writer.writerow([
-        "employee_id",
-        "gross_income",
-        "taxable_income",
-        "paye",
-        "uif_employee",
-        "uif_employer",
-        "sdl",
-        "net_pay",
-        "total_employer_cost",
-    ])
+    writer.writerow(
+        [
+            "employee_id",
+            "gross_income",
+            "taxable_income",
+            "paye",
+            "uif_employee",
+            "uif_employer",
+            "sdl",
+            "net_pay",
+            "total_employer_cost",
+        ]
+    )
 
     # Data rows
     for result in results:
-        writer.writerow([
-            result.employee_id,
-            str(result.gross_income),
-            str(result.taxable_income),
-            str(result.paye),
-            str(result.uif_employee),
-            str(result.uif_employer),
-            str(result.sdl),
-            str(result.net_pay),
-            str(result.total_employer_cost),
-        ])
+        writer.writerow(
+            [
+                result.employee_id,
+                str(result.gross_income),
+                str(result.taxable_income),
+                str(result.paye),
+                str(result.uif_employee),
+                str(result.uif_employer),
+                str(result.sdl),
+                str(result.net_pay),
+                str(result.total_employer_cost),
+            ]
+        )
 
     return output.getvalue().encode("utf-8")
 
@@ -409,7 +412,7 @@ def generate_results_csv(results: List[EmployeeResult]) -> bytes:
 # Default Repository Instance
 # ============================================================================
 
-_default_repository: Optional[IEvidenceRepository] = None
+_default_repository: IEvidenceRepository | None = None
 
 
 def get_evidence_repository() -> IEvidenceRepository:
@@ -437,4 +440,3 @@ def set_evidence_repository(repository: IEvidenceRepository) -> None:
     """
     global _default_repository
     _default_repository = repository
-

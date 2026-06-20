@@ -14,21 +14,25 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.domain.models import RunStatus
 from app.domain.schema import (
+    EmployeeResultResponse,
     IssueCount,
     RunCreateResponse,
     RunDetailResponse,
     RunErrorsResponse,
     RunResultsResponse,
     Totals,
-    EmployeeResultResponse,
     ValidationIssueResponse,
 )
 from app.errors import SchemaValidationError
 from app.rulesets.registry import select_ruleset
+from app.security import require_api_key
 from app.services import (
     calculate_compliance_run,
     create_compliance_run,
+    generate_run_id,
     has_errors,
     parse_csv_with_issues,
     persist_compliance_run,
@@ -38,7 +42,7 @@ from app.services import (
 from app.storage.db import get_session
 from app.storage.repo_runs import RunRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 logger = logging.getLogger(__name__)
 
 
@@ -68,22 +72,25 @@ async def create_compliance_run_endpoint(
         HTTPException: If schema validation fails or processing error occurs.
     """
     try:
-        # Read file content
-        content = await file.read()
+        # Read one byte beyond the configured limit so oversized requests can
+        # be rejected without buffering an unbounded upload.
+        content = await file.read(settings.MAX_UPLOAD_BYTES + 1)
+        if len(content) > settings.MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"CSV file exceeds the {settings.MAX_UPLOAD_BYTES} byte upload limit.",
+            )
 
         # Generate unique run ID
         run_id = generate_run_id()
 
         logger.info(f"Processing compliance run {run_id}")
 
-        # Store raw file (evidence)
-        raw_file_id = await store_raw_file(content, file.filename or "payroll.csv")
-
         # Parse CSV → (rows, run_context, parse_issues)
         try:
             rows, run_context, parse_issues = parse_csv_with_issues(content)
         except SchemaValidationError as e:
-            raise HTTPException(status_code=400, detail=e.message)
+            raise HTTPException(status_code=400, detail=e.message) from e
 
         if not rows and not parse_issues:
             raise HTTPException(
@@ -95,6 +102,10 @@ async def create_compliance_run_endpoint(
             f"Parsed {len(rows)} rows for company {run_context.company_id}, "
             f"pay_date {run_context.pay_date}, parse_issues: {len(parse_issues)}"
         )
+
+        # Store evidence only after schema parsing succeeds. This avoids
+        # orphaned files that cannot be associated with a compliance run.
+        raw_file_id = await store_raw_file(content, file.filename or "payroll.csv")
 
         # Select ruleset based on tax_year and pay_date
         ruleset = select_ruleset(
@@ -113,9 +124,7 @@ async def create_compliance_run_endpoint(
 
         # Check for blocking errors
         if has_errors(all_issues):
-            logger.warning(
-                f"Run {run_id} has validation errors, creating failed run"
-            )
+            logger.warning(f"Run {run_id} has validation errors, creating failed run")
             # Create failed run with no results
             run = create_compliance_run(
                 run_id=run_id,
@@ -125,6 +134,7 @@ async def create_compliance_run_endpoint(
                 totals=None,
                 ruleset_version_used=ruleset.ruleset_version_id,
                 raw_file_id=raw_file_id,
+                status=RunStatus.FAILED,
             )
             await persist_compliance_run(run)
 
@@ -194,11 +204,13 @@ async def create_compliance_run_endpoint(
             ),
         )
 
+    except HTTPException:
+        raise
     except SchemaValidationError as e:
-        raise HTTPException(status_code=400, detail=e.message)
+        raise HTTPException(status_code=400, detail=e.message) from e
     except Exception as e:
         logger.error(f"Error processing compliance run: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
@@ -252,7 +264,9 @@ async def get_run_detail(
             total_sdl=run.totals.total_sdl,
             total_net_pay=run.totals.total_net_pay,
             total_employer_cost=run.totals.total_employer_cost,
-        ) if run.totals else None,
+        )
+        if run.totals
+        else None,
     )
 
 
@@ -310,7 +324,9 @@ async def get_run_results(
             total_sdl=run.totals.total_sdl,
             total_net_pay=run.totals.total_net_pay,
             total_employer_cost=run.totals.total_employer_cost,
-        ) if run.totals else None,
+        )
+        if run.totals
+        else None,
     )
 
 
@@ -392,7 +408,9 @@ async def export_run_results(
     # Metadata rows
     writer.writerow(["# Compliance Results Export"])
     writer.writerow(["# Run ID", run.run_id])
-    writer.writerow(["# Payroll Run ID", run.payroll_run_id])  # Direct from run object - audit purity
+    writer.writerow(
+        ["# Payroll Run ID", run.payroll_run_id]
+    )  # Direct from run object - audit purity
     writer.writerow(["# Company ID", run.company_id])
     writer.writerow(["# Pay Date", str(run.pay_date)])
     writer.writerow(["# Tax Year", run.tax_year])
@@ -401,47 +419,53 @@ async def export_run_results(
     writer.writerow([])  # Blank line
 
     # Header row
-    writer.writerow([
-        "employee_id",
-        "gross_income",
-        "taxable_income",
-        "paye",
-        "uif_employee",
-        "uif_employer",
-        "sdl",
-        "net_pay",
-        "total_employer_cost",
-    ])
+    writer.writerow(
+        [
+            "employee_id",
+            "gross_income",
+            "taxable_income",
+            "paye",
+            "uif_employee",
+            "uif_employer",
+            "sdl",
+            "net_pay",
+            "total_employer_cost",
+        ]
+    )
 
     # Per-employee data rows
     for result in run.results:
-        writer.writerow([
-            result.employee_id,
-            str(result.gross_income),
-            str(result.taxable_income),
-            str(result.paye),
-            str(result.uif_employee),
-            str(result.uif_employer),
-            str(result.sdl),
-            str(result.net_pay),
-            str(result.total_employer_cost),
-        ])
+        writer.writerow(
+            [
+                result.employee_id,
+                str(result.gross_income),
+                str(result.taxable_income),
+                str(result.paye),
+                str(result.uif_employee),
+                str(result.uif_employer),
+                str(result.sdl),
+                str(result.net_pay),
+                str(result.total_employer_cost),
+            ]
+        )
 
     # Totals row
     if run.totals:
         writer.writerow([])  # Blank line
         writer.writerow(["TOTALS"])
-        writer.writerow([
-            f"{run.totals.employee_count} employees",
-            str(run.totals.total_gross),
-            str(run.totals.total_taxable),
-            str(run.totals.total_paye),
-            str(run.totals.total_uif_employee),
-            str(run.totals.total_uif_employer),
-            str(run.totals.total_sdl),
-            str(run.totals.total_net_pay),
-            str(run.totals.total_employer_cost),
-        ])
+        writer.writerow(
+            [
+                f"{run.totals.employee_count} employees",
+                str(run.totals.total_gross),
+                str(run.totals.total_taxable),
+                str(run.totals.total_paye),
+                str(run.totals.total_uif_employee),
+                str(run.totals.total_uif_employer),
+                str(run.totals.total_sdl),
+                str(run.totals.total_net_pay),
+                str(run.totals.total_employer_cost),
+            ]
+        )
 
     csv_content = output.getvalue().encode("utf-8")
 
@@ -449,8 +473,5 @@ async def export_run_results(
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=compliance_results_{run_id}.csv"
-        },
+        headers={"Content-Disposition": f"attachment; filename=compliance_results_{run_id}.csv"},
     )
-

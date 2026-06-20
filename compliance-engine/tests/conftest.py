@@ -25,7 +25,7 @@ def event_loop():
 @pytest.fixture(autouse=True)
 async def reset_database():
     """Reset database before each test."""
-    from app.storage.db import engine, Base
+    from app.storage.db import Base, engine
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

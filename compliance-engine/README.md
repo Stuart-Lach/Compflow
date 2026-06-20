@@ -61,7 +61,7 @@ uv pip install -e ".[dev]"
 
 ```bash
 # From compliance-engine directory
-uvicorn src.app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be available at:
@@ -80,6 +80,46 @@ pytest --cov=src --cov-report=html
 
 # Run specific test file
 pytest tests/test_calculation_paye.py -v
+```
+
+## Deploying (Render + Supabase)
+
+### Supabase setup
+
+- Create a Supabase project and open **Project Settings -> Database**.
+- Copy the Postgres connection string and use it for Render `DATABASE_URL`.
+- If Supabase provides `postgres://...`, the app normalizes it automatically.
+
+### Render environment variables
+
+- `APP_ENV=production`
+- `DATABASE_URL=<your-supabase-postgres-url>`
+- `CORS_ORIGINS=http://localhost:3000,https://YOUR-VERCEL-DOMAIN.vercel.app`
+- `API_KEYS=<a-long-random-secret>`
+- `AUTO_CREATE_SCHEMA=false`
+- `FILE_STORAGE_BACKEND=database`
+
+The root-level `render.yaml` installs the package, runs `alembic upgrade head`,
+and then starts `uvicorn app.main:app`. Production startup fails fast if
+SQLite, wildcard CORS, local evidence storage, automatic schema creation, or
+an empty API key configuration is used.
+
+Protected payroll and export endpoints require:
+
+```http
+X-API-Key: <configured-key>
+```
+
+### Local run command (SQLite)
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Test command
+
+```bash
+pytest
 ```
 
 ## API Endpoints

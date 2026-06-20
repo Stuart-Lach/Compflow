@@ -2,31 +2,28 @@
 Test to verify reference calculator independence and correctness.
 """
 
-from decimal import Decimal
 from datetime import date
-
-import pytest
+from decimal import Decimal
 
 from app.domain.models import EmploymentType, PayrollFrequency, PayrollInputRow
 from app.reference.reference_calculator import (
     ReferenceRuleset,
     TaxBracket,
     calculate_reference_results,
-    round_money,
 )
 
 
 def test_reference_calculator_independence():
     """Verify reference calculator doesn't import production calculation service."""
-    import sys
     import app.reference.reference_calculator as ref_calc
 
     # Check module doesn't have any imports from app.services.calculation
     module_dict = vars(ref_calc)
     for name, obj in module_dict.items():
-        if hasattr(obj, '__module__'):
-            assert 'app.services.calculation' not in obj.__module__, \
+        if hasattr(obj, "__module__"):
+            assert "app.services.calculation" not in obj.__module__, (
                 f"Reference calculator must not import from app.services.calculation, but {name} does"
+            )
 
 
 def test_reference_calculator_basic():

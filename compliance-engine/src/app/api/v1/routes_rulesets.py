@@ -13,9 +13,9 @@ from app.domain.schema import (
 from app.errors import RulesetNotFoundError
 from app.rulesets.registry import (
     get_ruleset,
+    get_sdl_config,
     get_tax_brackets,
     get_uif_config,
-    get_sdl_config,
     is_ruleset_current,
     list_rulesets,
 )
@@ -90,5 +90,4 @@ async def get_ruleset_detail(ruleset_id: str) -> RulesetDetailResponse:
         )
 
     except RulesetNotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message)
-
+        raise HTTPException(status_code=404, detail=e.message) from e

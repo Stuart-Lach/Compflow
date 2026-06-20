@@ -11,13 +11,78 @@ Design: Rulesets are stored as code modules, not in database. This provides:
 - Simple deployment (no data migrations)
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Protocol
 
 from app.errors import RulesetNotFoundError
-from app.rulesets import za_2025_26_v1
+from app.rulesets import za_2025_26_v1, za_2026_27_v1
+
+
+class TaxBracketData(Protocol):
+    """Read-only shape shared by versioned ruleset bracket records."""
+
+    @property
+    def min_income(self) -> Decimal: ...
+
+    @property
+    def max_income(self) -> Decimal | None: ...
+
+    @property
+    def rate(self) -> Decimal: ...
+
+    @property
+    def base_tax(self) -> Decimal: ...
+
+
+class RulesetModule(Protocol):
+    """Required interface implemented by each ruleset module."""
+
+    @property
+    def RULESET_VERSION_ID(self) -> str: ...
+
+    @property
+    def RULESET_ID(self) -> str: ...
+
+    @property
+    def TAX_YEAR(self) -> str: ...
+
+    @property
+    def DESCRIPTION(self) -> str: ...
+
+    @property
+    def EFFECTIVE_FROM(self) -> date: ...
+
+    @property
+    def EFFECTIVE_TO(self) -> date | None: ...
+
+    @property
+    def TAX_BRACKETS_ANNUAL(self) -> Sequence[TaxBracketData]: ...
+
+    @property
+    def REBATES(self) -> Mapping[str, Decimal]: ...
+
+    @property
+    def UIF_EMPLOYEE_RATE(self) -> Decimal: ...
+
+    @property
+    def UIF_EMPLOYER_RATE(self) -> Decimal: ...
+
+    @property
+    def UIF_MONTHLY_CAP(self) -> Decimal: ...
+
+    @property
+    def UIF_ANNUAL_CAP(self) -> Decimal: ...
+
+    @property
+    def SDL_RATE(self) -> Decimal: ...
+
+    @property
+    def SDL_ANNUAL_PAYROLL_THRESHOLD(self) -> Decimal: ...
+
+    def get_monthly_tax_brackets(self) -> Sequence[TaxBracketData]: ...
 
 
 @dataclass
@@ -29,21 +94,21 @@ class RulesetInfo:
     tax_year: str
     description: str
     effective_from: date
-    effective_to: Optional[date]
-    module: object  # Reference to the ruleset module
+    effective_to: date | None
+    module: RulesetModule
 
 
 # ============================================================================
 # RULESET REGISTRY
 # ============================================================================
 
-_RULESETS: Dict[str, RulesetInfo] = {}
+_RULESETS: dict[str, RulesetInfo] = {}
 
 
-def _register_ruleset(module: object) -> None:
+def _register_ruleset(module: RulesetModule) -> None:
     """
     Register a ruleset module in the registry.
-    
+
     Args:
         module: Ruleset module with required attributes.
     """
@@ -64,6 +129,7 @@ def _register_ruleset(module: object) -> None:
 
 # Register available rulesets
 _register_ruleset(za_2025_26_v1)
+_register_ruleset(za_2026_27_v1)
 
 
 # ============================================================================
@@ -74,28 +140,28 @@ _register_ruleset(za_2025_26_v1)
 def select_ruleset(
     tax_year: str,
     pay_date: date,
-    override: Optional[str] = None,
+    override: str | None = None,
 ) -> RulesetInfo:
     """
     Select the appropriate ruleset based on tax_year, pay_date, and optional override.
-    
+
     This function ONLY selects data, it does NOT perform any calculations.
-    
+
     Selection logic:
     1. If override provided, use that exact ruleset
     2. Otherwise, find ruleset where:
        - tax_year matches (if specified)
        - effective_from <= pay_date <= effective_to
     3. If multiple match, use the one with the latest effective_from
-    
+
     Args:
         tax_year: Tax year string (e.g., "2025_26")
         pay_date: The payment date
         override: Optional explicit ruleset version ID to use
-        
+
     Returns:
         RulesetInfo for the selected ruleset
-        
+
     Raises:
         RulesetNotFoundError: If no suitable ruleset found
     """
@@ -107,26 +173,26 @@ def select_ruleset(
                 details={"available_rulesets": list(_RULESETS.keys())},
             )
         return _RULESETS[override]
-    
+
     # 2. Find ruleset by tax_year and pay_date
     candidates = []
-    
+
     for info in _RULESETS.values():
         # Check tax year match
         if info.tax_year != tax_year:
             continue
-            
+
         # Check effective date range
         if info.effective_from <= pay_date:
             if info.effective_to is None or pay_date <= info.effective_to:
                 candidates.append(info)
-    
+
     # 3. If multiple candidates, use the one with latest effective_from
     if candidates:
         # Sort by effective_from descending, take the first (most recent)
         candidates.sort(key=lambda r: r.effective_from, reverse=True)
         return candidates[0]
-    
+
     # No ruleset found
     raise RulesetNotFoundError(
         f"No active ruleset found for tax_year={tax_year}, pay_date={pay_date}",
@@ -148,28 +214,28 @@ def select_ruleset(
 
 def select_ruleset_for_date(
     pay_date: date,
-    tax_year: Optional[str] = None,
-    ruleset_override: Optional[str] = None,
+    tax_year: str | None = None,
+    ruleset_override: str | None = None,
 ) -> RulesetInfo:
     """
     Legacy function for backward compatibility.
     Selects ruleset based on pay_date and optional tax_year hint.
-    
+
     Args:
         pay_date: The payment date
         tax_year: Optional tax year hint (e.g., "2025_26")
         ruleset_override: Optional explicit ruleset ID to use
-        
+
     Returns:
         RulesetInfo for the selected ruleset
-        
+
     Raises:
         RulesetNotFoundError: If no suitable ruleset found
     """
     # If explicit override provided, use it
     if ruleset_override:
         return get_ruleset(ruleset_override)
-    
+
     # Determine tax_year from pay_date if not provided
     if tax_year is None:
         # SA tax year runs March 1 to Feb 28/29
@@ -179,7 +245,7 @@ def select_ruleset_for_date(
         else:
             # Jan-Feb: previous year to current year
             tax_year = f"{pay_date.year - 1}_{str(pay_date.year)[-2:]}"
-    
+
     return select_ruleset(tax_year, pay_date, ruleset_override)
 
 
@@ -188,10 +254,10 @@ def select_ruleset_for_date(
 # ============================================================================
 
 
-def list_rulesets() -> List[RulesetInfo]:
+def list_rulesets() -> list[RulesetInfo]:
     """
     List all available rulesets.
-    
+
     Returns:
         List of RulesetInfo objects.
     """
@@ -208,13 +274,13 @@ def list_rulesets() -> List[RulesetInfo]:
 def get_ruleset(ruleset_id: str) -> RulesetInfo:
     """
     Get a specific ruleset by ID.
-    
+
     Args:
         ruleset_id: The ruleset identifier (e.g., "ZA_2025_26_v1")
-        
+
     Returns:
         RulesetInfo for the requested ruleset.
-        
+
     Raises:
         RulesetNotFoundError: If ruleset doesn't exist.
     """
@@ -229,24 +295,23 @@ def get_ruleset(ruleset_id: str) -> RulesetInfo:
 def get_current_ruleset() -> RulesetInfo:
     """
     Get the currently active ruleset based on today's date.
-    
+
     Returns:
         RulesetInfo for the current ruleset.
-        
+
     Raises:
         RulesetNotFoundError: If no active ruleset found.
     """
-    today = date.today()
-    return select_ruleset_for_date(today)
+    return select_ruleset_for_date(date.today())
 
 
 def is_ruleset_current(ruleset_id: str) -> bool:
     """
     Check if a ruleset is currently active.
-    
+
     Args:
         ruleset_id: The ruleset identifier.
-        
+
     Returns:
         True if the ruleset is currently active.
     """
@@ -262,25 +327,25 @@ def is_ruleset_current(ruleset_id: str) -> bool:
 # ============================================================================
 
 
-def get_tax_brackets(ruleset_id: str, frequency: str = "monthly") -> List[dict]:
+def get_tax_brackets(ruleset_id: str, frequency: str = "monthly") -> list[dict]:
     """
     Get tax brackets from a ruleset.
-    
+
     Args:
         ruleset_id: The ruleset identifier.
         frequency: "monthly" or "annual".
-        
+
     Returns:
         List of tax bracket dictionaries.
     """
     info = get_ruleset(ruleset_id)
     module = info.module
-    
+
     if frequency == "monthly":
         brackets = module.get_monthly_tax_brackets()
     else:
         brackets = module.TAX_BRACKETS_ANNUAL
-    
+
     return [
         {
             "min_income": b.min_income,
@@ -295,10 +360,10 @@ def get_tax_brackets(ruleset_id: str, frequency: str = "monthly") -> List[dict]:
 def get_uif_config(ruleset_id: str) -> dict:
     """
     Get UIF configuration from a ruleset.
-    
+
     Args:
         ruleset_id: The ruleset identifier.
-        
+
     Returns:
         Dictionary with UIF rates and caps.
     """
@@ -315,10 +380,10 @@ def get_uif_config(ruleset_id: str) -> dict:
 def get_sdl_config(ruleset_id: str) -> dict:
     """
     Get SDL configuration from a ruleset.
-    
+
     Args:
         ruleset_id: The ruleset identifier.
-        
+
     Returns:
         Dictionary with SDL rate and threshold.
     """
@@ -328,4 +393,3 @@ def get_sdl_config(ruleset_id: str) -> dict:
         "rate": module.SDL_RATE,
         "annual_threshold": module.SDL_ANNUAL_PAYROLL_THRESHOLD,
     }
-

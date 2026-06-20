@@ -28,3 +28,14 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Python / Compliance Engine ###
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.py[cod]
+**/*.db
+**/*.sqlite*
+compliance-engine/storage/
+compliance-engine/.git/

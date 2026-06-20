@@ -9,12 +9,10 @@ import pytest
 
 from app.domain.models import (
     EmploymentType,
-    IssueSeverity,
     PayrollFrequency,
     PayrollInputRow,
-    ResidencyStatus,
 )
-from app.rulesets.registry import get_current_ruleset
+from app.rulesets.registry import get_ruleset
 from app.services.validation import (
     is_sdl_liable,
     is_uif_applicable,
@@ -24,8 +22,8 @@ from app.services.validation import (
 
 @pytest.fixture
 def ruleset():
-    """Get current ruleset for testing."""
-    return get_current_ruleset()
+    """Use a fixed ruleset so the test is independent of today's date."""
+    return get_ruleset("ZA_2025_26_v1")
 
 
 @pytest.fixture
@@ -180,4 +178,3 @@ def test_validate_multiple_rows(ruleset, sample_employee_row, sample_contractor_
 
     # Contractor should generate warning
     assert any(i.employee_id == "CON001" for i in issues)
-

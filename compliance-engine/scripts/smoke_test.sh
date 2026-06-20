@@ -7,7 +7,7 @@ echo "🔥 Starting smoke test..."
 
 # Start server in background
 echo "📡 Starting uvicorn server..."
-uvicorn src.app.main:app --host 0.0.0.0 --port 8000 &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 
 # Wait for server to start
@@ -19,7 +19,7 @@ echo "🏥 Testing /health endpoint..."
 HEALTH_RESPONSE=$(curl -s http://localhost:8000/health)
 echo "Response: $HEALTH_RESPONSE"
 
-if echo "$HEALTH_RESPONSE" | grep -q "healthy"; then
+if echo "$HEALTH_RESPONSE" | grep -q '"status":"ok"'; then
     echo "✅ Health check passed!"
 else
     echo "❌ Health check failed!"

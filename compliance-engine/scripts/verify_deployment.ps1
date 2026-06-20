@@ -101,7 +101,7 @@ Write-Host "=" * 70 -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Run full test suite: pytest tests/ -v" -ForegroundColor White
-Write-Host "  2. Start server locally: uvicorn src.app.main:app --host 0.0.0.0 --port 8000" -ForegroundColor White
+Write-Host "  2. Start server locally: uvicorn app.main:app --host 0.0.0.0 --port 8000" -ForegroundColor White
 Write-Host "  3. Run smoke tests: .\scripts\smoke_test.ps1" -ForegroundColor White
 Write-Host "  4. Deploy to Render using render.yaml" -ForegroundColor White
 Write-Host ""
