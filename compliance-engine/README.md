@@ -95,7 +95,7 @@ pytest tests/test_calculation_paye.py -v
 - `APP_ENV=production`
 - `DATABASE_URL=<your-supabase-postgres-url>`
 - `CORS_ORIGINS=http://localhost:3000,https://YOUR-VERCEL-DOMAIN.vercel.app`
-- `API_KEYS=<a-long-random-secret>`
+- `API_KEY_BINDINGS={"COMPANY_ID":["active-secret","rotation-secret"]}`
 - `AUTO_CREATE_SCHEMA=false`
 - `FILE_STORAGE_BACKEND=database`
 
@@ -107,8 +107,11 @@ an empty API key configuration is used.
 Protected payroll and export endpoints require:
 
 ```http
-X-API-Key: <configured-key>
+X-API-Key: <company-bound-key>
 ```
+
+Each key is bound to one `company_id`. Uploads with a different company are
+rejected, and reads/exports are filtered by the authenticated company.
 
 ### Local run command (SQLite)
 

@@ -28,10 +28,11 @@ from app.domain.schema import (
 )
 from app.errors import SchemaValidationError
 from app.rulesets.registry import select_ruleset
-from app.security import require_api_key
+from app.security import AuthContext, require_api_key
 from app.services import (
     calculate_compliance_run,
     create_compliance_run,
+    delete_raw_file,
     generate_run_id,
     has_errors,
     parse_csv_with_issues,
@@ -42,13 +43,14 @@ from app.services import (
 from app.storage.db import get_session
 from app.storage.repo_runs import RunRepository
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.post("/runs", response_model=RunCreateResponse)
 async def create_compliance_run_endpoint(
     file: Annotated[UploadFile, File(description="Payroll CSV file")],
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> RunCreateResponse:
     """
@@ -71,6 +73,8 @@ async def create_compliance_run_endpoint(
     Raises:
         HTTPException: If schema validation fails or processing error occurs.
     """
+    raw_file_id: str | None = None
+    run_persisted = False
     try:
         # Read one byte beyond the configured limit so oversized requests can
         # be rejected without buffering an unbounded upload.
@@ -103,9 +107,11 @@ async def create_compliance_run_endpoint(
             f"pay_date {run_context.pay_date}, parse_issues: {len(parse_issues)}"
         )
 
-        # Store evidence only after schema parsing succeeds. This avoids
-        # orphaned files that cannot be associated with a compliance run.
-        raw_file_id = await store_raw_file(content, file.filename or "payroll.csv")
+        if auth.company_id is not None and run_context.company_id != auth.company_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Uploaded company_id does not match the authenticated company",
+            )
 
         # Select ruleset based on tax_year and pay_date
         ruleset = select_ruleset(
@@ -125,6 +131,7 @@ async def create_compliance_run_endpoint(
         # Check for blocking errors
         if has_errors(all_issues):
             logger.warning(f"Run {run_id} has validation errors, creating failed run")
+            raw_file_id = await store_raw_file(content, file.filename or "payroll.csv")
             # Create failed run with no results
             run = create_compliance_run(
                 run_id=run_id,
@@ -137,6 +144,7 @@ async def create_compliance_run_endpoint(
                 status=RunStatus.FAILED,
             )
             await persist_compliance_run(run)
+            run_persisted = True
 
             return RunCreateResponse(
                 run_id=run.run_id,
@@ -161,6 +169,8 @@ async def create_compliance_run_endpoint(
             f"Total SDL: {calc_result.totals.total_sdl}"
         )
 
+        raw_file_id = await store_raw_file(content, file.filename or "payroll.csv")
+
         # Create compliance run (evidence)
         run = create_compliance_run(
             run_id=run_id,
@@ -174,6 +184,7 @@ async def create_compliance_run_endpoint(
 
         # Persist to database
         await persist_compliance_run(run)
+        run_persisted = True
 
         logger.info(
             f"Completed run {run_id}: {len(calc_result.employee_results)} employees, "
@@ -205,10 +216,16 @@ async def create_compliance_run_endpoint(
         )
 
     except HTTPException:
+        if raw_file_id and not run_persisted:
+            await delete_raw_file(raw_file_id)
         raise
     except SchemaValidationError as e:
+        if raw_file_id and not run_persisted:
+            await delete_raw_file(raw_file_id)
         raise HTTPException(status_code=400, detail=e.message) from e
     except Exception as e:
+        if raw_file_id and not run_persisted:
+            await delete_raw_file(raw_file_id)
         logger.error(f"Error processing compliance run: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
@@ -216,6 +233,7 @@ async def create_compliance_run_endpoint(
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 async def get_run_detail(
     run_id: str,
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> RunDetailResponse:
     """
@@ -234,7 +252,7 @@ async def get_run_detail(
         HTTPException: If run not found.
     """
     repo = RunRepository(session)
-    run = await repo.get_run(run_id)
+    run = await repo.get_run(run_id, auth.company_id)
 
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
@@ -273,6 +291,7 @@ async def get_run_detail(
 @router.get("/runs/{run_id}/results", response_model=RunResultsResponse)
 async def get_run_results(
     run_id: str,
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> RunResultsResponse:
     """
@@ -291,7 +310,7 @@ async def get_run_results(
         HTTPException: If run not found.
     """
     repo = RunRepository(session)
-    run = await repo.get_run(run_id)
+    run = await repo.get_run(run_id, auth.company_id)
 
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
@@ -333,6 +352,7 @@ async def get_run_results(
 @router.get("/runs/{run_id}/errors", response_model=RunErrorsResponse)
 async def get_run_errors(
     run_id: str,
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> RunErrorsResponse:
     """
@@ -349,7 +369,7 @@ async def get_run_errors(
         HTTPException: If run not found.
     """
     repo = RunRepository(session)
-    run = await repo.get_run(run_id)
+    run = await repo.get_run(run_id, auth.company_id)
 
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
@@ -374,6 +394,7 @@ async def get_run_errors(
 @router.get("/runs/{run_id}/export")
 async def export_run_results(
     run_id: str,
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """
@@ -396,7 +417,7 @@ async def export_run_results(
         HTTPException: If run not found.
     """
     repo = RunRepository(session)
-    run = await repo.get_run(run_id)
+    run = await repo.get_run(run_id, auth.company_id)
 
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")

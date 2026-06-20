@@ -64,6 +64,11 @@ class IEvidenceRepository(ABC):
         pass
 
     @abstractmethod
+    async def delete_raw_file(self, file_id: str) -> bool:
+        """Delete raw evidence that could not be associated with a run."""
+        pass
+
+    @abstractmethod
     async def store_compliance_run(self, run: ComplianceRun) -> None:
         """
         Store a complete compliance run with all evidence.
@@ -141,6 +146,10 @@ class EvidenceRepository(IEvidenceRepository):
     async def retrieve_raw_file(self, file_id: str) -> bytes | None:
         """Retrieve stored raw file."""
         return await self._file_store.retrieve(file_id)
+
+    async def delete_raw_file(self, file_id: str) -> bool:
+        """Delete an unassociated raw file."""
+        return await self._file_store.delete(file_id)
 
     async def store_compliance_run(self, run: ComplianceRun) -> None:
         """Store a complete compliance run with all evidence."""
@@ -339,6 +348,17 @@ async def retrieve_raw_file(
         repository = EvidenceRepository()
 
     return await repository.retrieve_raw_file(file_id)
+
+
+async def delete_raw_file(
+    file_id: str,
+    repository: IEvidenceRepository | None = None,
+) -> bool:
+    """Delete raw evidence when run persistence does not complete."""
+    if repository is None:
+        repository = EvidenceRepository()
+
+    return await repository.delete_raw_file(file_id)
 
 
 async def get_compliance_run(

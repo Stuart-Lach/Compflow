@@ -8,16 +8,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.security import require_api_key
+from app.security import AuthContext, require_api_key
 from app.services.exports import build_employee_breakdown_csv, build_summary_pdf
 from app.storage.db import get_session
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 
 
 @router.get("/runs/{run_id}/export/employee-breakdown.csv")
 async def export_employee_breakdown_csv(
     run_id: str,
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """
@@ -37,7 +38,7 @@ async def export_employee_breakdown_csv(
     All currency values are formatted to 2 decimal places.
     """
     try:
-        csv_bytes = await build_employee_breakdown_csv(session, run_id)
+        csv_bytes = await build_employee_breakdown_csv(session, run_id, auth.company_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -53,6 +54,7 @@ async def export_employee_breakdown_csv(
 @router.get("/runs/{run_id}/export/summary.pdf")
 async def export_summary_pdf(
     run_id: str,
+    auth: AuthContext = Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """
@@ -68,7 +70,7 @@ async def export_summary_pdf(
     All currency values are formatted with "R" prefix and 2 decimal places.
     """
     try:
-        pdf_bytes = await build_summary_pdf(session, run_id)
+        pdf_bytes = await build_summary_pdf(session, run_id, auth.company_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

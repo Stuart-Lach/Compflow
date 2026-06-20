@@ -26,7 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.storage.db import ResultRecord, RunRecord
 
 
-async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> bytes:
+async def build_employee_breakdown_csv(
+    session: AsyncSession,
+    run_id: str,
+    company_id: str | None = None,
+) -> bytes:
     """
     Build employee breakdown CSV for a compliance run.
 
@@ -40,19 +44,19 @@ async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> by
     Raises:
         ValueError: If run not found.
     """
-    # Get results for this run
+    run_query = select(RunRecord).where(RunRecord.id == run_id)
+    if company_id is not None:
+        run_query = run_query.where(RunRecord.company_id == company_id)
+    run_result = await session.execute(run_query)
+    run = run_result.scalar_one_or_none()
+    if not run:
+        raise ValueError(f"Run not found: {run_id}")
+
     result = await session.execute(
         select(ResultRecord).where(ResultRecord.run_id == run_id).order_by(ResultRecord.employee_id)
     )
     results = result.scalars().all()
-
     if not results:
-        # Check if run exists
-        run_result = await session.execute(select(RunRecord).where(RunRecord.id == run_id))
-        run = run_result.scalar_one_or_none()
-        if not run:
-            raise ValueError(f"Run not found: {run_id}")
-        # Run exists but has no results
         raise ValueError(f"No results found for run: {run_id}")
 
     # Build CSV
@@ -80,7 +84,11 @@ async def build_employee_breakdown_csv(session: AsyncSession, run_id: str) -> by
     return output.getvalue().encode("utf-8")
 
 
-async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
+async def build_summary_pdf(
+    session: AsyncSession,
+    run_id: str,
+    company_id: str | None = None,
+) -> bytes:
     """
     Build compliance summary PDF for a payroll run.
 
@@ -95,7 +103,10 @@ async def build_summary_pdf(session: AsyncSession, run_id: str) -> bytes:
         ValueError: If run not found.
     """
     # Get run record
-    result = await session.execute(select(RunRecord).where(RunRecord.id == run_id))
+    query = select(RunRecord).where(RunRecord.id == run_id)
+    if company_id is not None:
+        query = query.where(RunRecord.company_id == company_id)
+    result = await session.execute(query)
     run = result.scalar_one_or_none()
 
     if not run:

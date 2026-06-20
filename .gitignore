@@ -39,3 +39,4 @@ bin/
 **/*.sqlite*
 compliance-engine/storage/
 compliance-engine/.git/
+compliance-engine/backups/

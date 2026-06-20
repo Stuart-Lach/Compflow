@@ -25,8 +25,10 @@ def event_loop():
 @pytest.fixture(autouse=True)
 async def reset_database():
     """Reset database before each test."""
+    from app.security import reset_rate_limiter
     from app.storage.db import Base, engine
 
+    reset_rate_limiter()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
@@ -36,6 +38,7 @@ async def reset_database():
     # Cleanup after test
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    reset_rate_limiter()
 
 
 @pytest.fixture

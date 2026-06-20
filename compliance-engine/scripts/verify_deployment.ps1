@@ -79,9 +79,11 @@ try {
 # Test 5: Check render.yaml exists
 Write-Host "5. Checking deployment files..." -ForegroundColor Yellow
 $files = @(
-    "render.yaml",
+    "..\render.yaml",
     "requirements.txt",
-    ".env.example"
+    ".env.example",
+    "alembic.ini",
+    "docs\production_runbook.md"
 )
 
 foreach ($file in $files) {

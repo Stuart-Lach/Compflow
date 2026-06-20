@@ -2,6 +2,7 @@
 Application configuration using Pydantic Settings.
 """
 
+import json
 from pathlib import Path
 from typing import Literal
 
@@ -41,7 +42,9 @@ class Settings(BaseSettings):
 
     # API
     API_V1_PREFIX: str = "/api/v1"
-    API_KEYS: str = ""
+    API_KEY_BINDINGS: str = ""
+    RATE_LIMIT_REQUESTS: int = 120
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
@@ -51,8 +54,8 @@ class Settings(BaseSettings):
 
         if self.DEBUG:
             raise ValueError("DEBUG must be false in production")
-        if not self.api_keys_list:
-            raise ValueError("API_KEYS must contain at least one key in production")
+        if not self.api_key_bindings:
+            raise ValueError("API_KEY_BINDINGS must contain at least one company in production")
         if self.database_url_for_sqlalchemy.startswith("sqlite"):
             raise ValueError("Production requires PostgreSQL; SQLite is not supported")
         if self.FILE_STORAGE_BACKEND != "database":
@@ -72,9 +75,36 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
-    def api_keys_list(self) -> list[str]:
-        """Return configured API keys without empty values."""
-        return [key.strip() for key in self.API_KEYS.split(",") if key.strip()]
+    def api_key_bindings(self) -> dict[str, tuple[str, ...]]:
+        """
+        Return company-to-key bindings.
+
+        Format:
+        {"COMPANY_ID": ["active-key", "rotation-key"]}
+        """
+        if not self.API_KEY_BINDINGS.strip():
+            return {}
+
+        try:
+            raw = json.loads(self.API_KEY_BINDINGS)
+        except json.JSONDecodeError as exc:
+            raise ValueError("API_KEY_BINDINGS must be valid JSON") from exc
+
+        if not isinstance(raw, dict):
+            raise ValueError("API_KEY_BINDINGS must be a JSON object")
+
+        bindings: dict[str, tuple[str, ...]] = {}
+        for company_id, keys in raw.items():
+            if not isinstance(company_id, str) or not company_id.strip():
+                raise ValueError("API_KEY_BINDINGS company IDs must be non-empty strings")
+            if not isinstance(keys, list):
+                raise ValueError("Each API_KEY_BINDINGS value must be a JSON array")
+            normalized = tuple(key.strip() for key in keys if isinstance(key, str) and key.strip())
+            if not normalized:
+                raise ValueError(f"Company {company_id!r} must have at least one API key")
+            bindings[company_id.strip()] = normalized
+
+        return bindings
 
     @property
     def database_url_for_sqlalchemy(self) -> str:
