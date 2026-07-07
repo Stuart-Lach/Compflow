@@ -8,8 +8,13 @@
    - `DATABASE_URL`
    - `CORS_ORIGINS`
    - `API_KEY_BINDINGS`
+   - `ADMIN_USERNAME`
+   - `ADMIN_PASSWORD_HASH`
+   - `ADMIN_SESSION_SECRET`
+   - `ADMIN_COOKIE_SECURE=true`
 4. Render runs `alembic upgrade head` as the pre-deploy command.
 5. `/ready` must return HTTP 200 before traffic is accepted.
+6. `/admin` must require login and must only be shared with administrators.
 
 `API_KEY_BINDINGS` is a JSON object mapping each company to one or more keys:
 
@@ -25,6 +30,35 @@
 4. Remove the old key and deploy again.
 
 Keys must never be committed or written to logs.
+
+## Administrator console
+
+The desktop operations console is served from `/admin`. It provides maintenance,
+monitoring, readiness checks, alerts, and controlled admin actions for the
+backend used by app clients.
+
+Administrator access is separate from company API keys:
+
+- company API keys are for payroll integrations
+- administrator login is for human operators only
+- administrator sessions are signed and stored in secure HTTP-only cookies
+
+Generate the administrator password hash from an installed checkout:
+
+```powershell
+python -m app.admin.security
+```
+
+Store only the generated hash in `ADMIN_PASSWORD_HASH`; never store the
+plaintext administrator password. Use a random 32+ character value for
+`ADMIN_SESSION_SECRET`, and keep `ADMIN_COOKIE_SECURE=true` in production.
+
+If an administrator leaves the team:
+
+1. Change the administrator password.
+2. Generate and set a new `ADMIN_PASSWORD_HASH`.
+3. Rotate `ADMIN_SESSION_SECRET` to invalidate old dashboard sessions.
+4. Redeploy and verify `/admin` login.
 
 ## Backups
 

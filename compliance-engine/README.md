@@ -11,6 +11,8 @@ An API-first payroll compliance engine for South Africa. This system validates a
 - **Validation**: Schema validation, business rule validation, and warnings
 - **Evidence Storage**: Full audit trail with raw files, normalized data, and computed outputs
 - **Versioned Rulesets**: Tax rules stored as data, versioned, with effective dates
+- **Administrator Dashboard**: Desktop web console at `/admin` for maintenance,
+  monitoring, readiness checks, alerts, and rate-limit reset tooling
 
 ## Quick Start
 
@@ -68,6 +70,7 @@ The API will be available at:
 - API: http://localhost:8000
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+- Admin console: http://localhost:8000/admin
 
 ### Running Tests
 
@@ -96,13 +99,43 @@ pytest tests/test_calculation_paye.py -v
 - `DATABASE_URL=<your-supabase-postgres-url>`
 - `CORS_ORIGINS=http://localhost:3000,https://YOUR-VERCEL-DOMAIN.vercel.app`
 - `API_KEY_BINDINGS={"COMPANY_ID":["active-secret","rotation-secret"]}`
+- `ADMIN_USERNAME=<administrator-username>`
+- `ADMIN_PASSWORD_HASH=<pbkdf2 hash; generate with python -m app.admin.security>`
+- `ADMIN_SESSION_SECRET=<random 32+ character secret>`
+- `ADMIN_COOKIE_SECURE=true`
 - `AUTO_CREATE_SCHEMA=false`
 - `FILE_STORAGE_BACKEND=database`
 
 The root-level `render.yaml` installs the package, runs `alembic upgrade head`,
 and then starts `uvicorn app.main:app`. Production startup fails fast if
 SQLite, wildcard CORS, local evidence storage, automatic schema creation, or
-an empty API key configuration is used.
+an empty API key/admin configuration is used.
+
+### Administrator dashboard
+
+The desktop administrator console is available at:
+
+```text
+/admin
+```
+
+It is separate from company API keys. Company API keys authenticate payroll
+integrations; the admin console uses an administrator username, password hash,
+and signed secure session cookie. Use it for:
+
+- service readiness and database/ruleset status
+- recent compliance-run monitoring
+- operational alerts
+- maintenance actions such as readiness checks and rate-limit reset
+
+Generate the password hash from the installed package:
+
+```bash
+python -m app.admin.security
+```
+
+Set the resulting value as `ADMIN_PASSWORD_HASH`. Do not store a plaintext
+administrator password in `.env`, Render, or source control.
 
 Protected payroll and export endpoints require:
 

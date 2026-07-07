@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.responses import Response
 
+from app.admin.routes import router as admin_router
 from app.api.v1 import routes_exports, routes_health, routes_rulesets, routes_runs
 from app.config import settings
 from app.logging_config import setup_logging
@@ -85,6 +86,7 @@ async def audit_request(
 
 
 # Include routers
+app.include_router(admin_router)
 app.include_router(routes_health.router, prefix=settings.API_V1_PREFIX, tags=["Health"])
 app.include_router(routes_rulesets.router, prefix=settings.API_V1_PREFIX, tags=["Rulesets"])
 app.include_router(routes_runs.router, prefix=settings.API_V1_PREFIX, tags=["Runs"])
