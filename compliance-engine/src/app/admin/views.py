@@ -81,6 +81,7 @@ def dashboard_page() -> str:
         <a href="#alerts">Alerts</a>
         <a href="#runs">Recent runs</a>
         <a href="#maintenance">Maintenance</a>
+        <a href="#audit">Admin audit</a>
       </nav>
       <form method="post" action="/admin/logout">
         <button class="ghost" type="submit">Sign out</button>
@@ -105,6 +106,8 @@ def dashboard_page() -> str:
         <article class="card"><span>Ruleset</span><strong id="ruleset">...</strong></article>
         <article class="card"><span>Total runs</span><strong id="runs-total">...</strong></article>
         <article class="card"><span>Failed 24h</span><strong id="failed-24h">...</strong></article>
+        <article class="card"><span>Admin role</span><strong id="admin-role">...</strong></article>
+        <article class="card"><span>Alert delivery</span><strong id="alert-delivery">...</strong></article>
       </section>
 
       <section class="panel" id="alerts">
@@ -155,8 +158,35 @@ def dashboard_page() -> str:
         <div class="actions">
           <button id="readiness-check">Run readiness check</button>
           <button id="reset-rate-limit" class="secondary">Reset rate limiter</button>
+          <button id="test-alert" class="secondary">Send test alert</button>
         </div>
         <pre id="maintenance-output" aria-live="polite">No maintenance action run yet.</pre>
+      </section>
+
+      <section class="panel" id="audit">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Accountability</p>
+            <h3>Recent admin audit events</h3>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Admin</th>
+                <th>Role</th>
+                <th>Event</th>
+                <th>Status</th>
+                <th>Request</th>
+              </tr>
+            </thead>
+            <tbody id="admin-audit-events">
+              <tr><td colspan="6">Loading audit events...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
   </div>
@@ -447,6 +477,8 @@ async function loadOverview() {
   document.getElementById("ruleset").textContent = data.system.current_ruleset;
   document.getElementById("runs-total").textContent = data.metrics.runs_total;
   document.getElementById("failed-24h").textContent = data.metrics.failed_runs_24h;
+  document.getElementById("admin-role").textContent = data.session?.role ?? "unknown";
+  document.getElementById("alert-delivery").textContent = data.system.alert_delivery;
 
   const alerts = data.alerts.length ? data.alerts : [{
     severity: "info",
@@ -472,6 +504,18 @@ async function loadOverview() {
     </tr>
   `).join("") : '<tr><td colspan="7">No compliance runs have been recorded yet.</td></tr>';
   document.getElementById("recent-runs").innerHTML = rows;
+
+  const auditRows = data.admin_audit_events.length ? data.admin_audit_events.map((event) => `
+    <tr>
+      <td>${escapeHtml(formatDate(event.created_at))}</td>
+      <td>${escapeHtml(event.admin_username ?? "-")}</td>
+      <td>${escapeHtml(event.admin_role ?? "-")}</td>
+      <td>${escapeHtml(event.event_type)}</td>
+      <td>${escapeHtml(event.status)}</td>
+      <td>${escapeHtml(event.request_id ?? "-")}</td>
+    </tr>
+  `).join("") : '<tr><td colspan="6">No administrator audit events have been recorded yet.</td></tr>';
+  document.getElementById("admin-audit-events").innerHTML = auditRows;
 }
 
 document.getElementById("refresh").addEventListener("click", () => {
@@ -497,6 +541,17 @@ document.getElementById("reset-rate-limit").addEventListener("click", async () =
     output.textContent = JSON.stringify(result, null, 2);
   } catch (error) {
     output.textContent = `Rate limiter reset failed: ${error.message}`;
+  }
+});
+
+document.getElementById("test-alert").addEventListener("click", async () => {
+  output.textContent = "Sending test alert...";
+  try {
+    const result = await fetchJson("/admin/api/maintenance/alerts/test", {method: "POST"});
+    output.textContent = JSON.stringify(result, null, 2);
+    await loadOverview();
+  } catch (error) {
+    output.textContent = `Test alert failed: ${error.message}`;
   }
 });
 

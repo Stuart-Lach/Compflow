@@ -8,13 +8,14 @@
    - `DATABASE_URL`
    - `CORS_ORIGINS`
    - `API_KEY_BINDINGS`
-   - `ADMIN_USERNAME`
-   - `ADMIN_PASSWORD_HASH`
+   - `ADMIN_USERS`
    - `ADMIN_SESSION_SECRET`
    - `ADMIN_COOKIE_SECURE=true`
+   - `ALERT_WEBHOOK_URL`
 4. Render runs `alembic upgrade head` as the pre-deploy command.
 5. `/ready` must return HTTP 200 before traffic is accepted.
 6. `/admin` must require login and must only be shared with administrators.
+7. Send a test alert from `/admin` and confirm it arrives in the incident channel.
 
 `API_KEY_BINDINGS` is a JSON object mapping each company to one or more keys:
 
@@ -41,7 +42,10 @@ Administrator access is separate from company API keys:
 
 - company API keys are for payroll integrations
 - administrator login is for human operators only
+- administrator users are named and role-scoped
 - administrator sessions are signed and stored in secure HTTP-only cookies
+- administrator login and maintenance actions are written to
+  `admin_audit_events`
 
 Generate the administrator password hash from an installed checkout:
 
@@ -49,16 +53,59 @@ Generate the administrator password hash from an installed checkout:
 python -m app.admin.security
 ```
 
-Store only the generated hash in `ADMIN_PASSWORD_HASH`; never store the
-plaintext administrator password. Use a random 32+ character value for
+Store only generated hashes inside `ADMIN_USERS`; never store plaintext
+administrator passwords. Use a random 32+ character value for
 `ADMIN_SESSION_SECRET`, and keep `ADMIN_COOKIE_SECURE=true` in production.
+
+Production should use `ADMIN_USERS` rather than a shared administrator account:
+
+```json
+{
+  "admin@example.com": {
+    "password_hash": "pbkdf2_sha256$390000$...",
+    "role": "admin"
+  },
+  "ops@example.com": {
+    "password_hash": "pbkdf2_sha256$390000$...",
+    "role": "operator"
+  },
+  "auditor@example.com": {
+    "password_hash": "pbkdf2_sha256$390000$...",
+    "role": "viewer"
+  }
+}
+```
+
+Roles:
+
+- `admin`: full administrator
+- `operator`: monitor and run maintenance actions
+- `viewer`: monitor only
 
 If an administrator leaves the team:
 
-1. Change the administrator password.
-2. Generate and set a new `ADMIN_PASSWORD_HASH`.
+1. Remove or update their `ADMIN_USERS` entry.
+2. Generate and set a new password hash if the account remains active.
 3. Rotate `ADMIN_SESSION_SECRET` to invalidate old dashboard sessions.
 4. Redeploy and verify `/admin` login.
+
+## Alert delivery
+
+Set `ALERT_WEBHOOK_URL` to an HTTPS endpoint from the chosen incident tool
+such as Slack, Microsoft Teams, PagerDuty, Make, Zapier, or an internal webhook
+receiver. The app sends critical/warning operational alerts only; payroll rows,
+API keys, and administrator passwords are never included.
+
+Before go-live:
+
+1. Configure `ALERT_WEBHOOK_URL`.
+2. Log into `/admin` as an `admin` or `operator`.
+3. Use **Send test alert**.
+4. Confirm the alert arrives in the incident channel.
+5. Record the channel, timestamp, and receiving operator.
+
+The alert sender deduplicates repeated active alerts for
+`ALERT_DEDUP_WINDOW_SECONDS` to avoid webhook floods.
 
 ## Backups
 

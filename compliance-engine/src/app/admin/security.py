@@ -23,6 +23,7 @@ class AdminSession:
     """Authenticated administrator session details."""
 
     username: str
+    role: str
     expires_at: int
 
 
@@ -67,14 +68,18 @@ def verify_admin_password(password: str, stored_hash: str) -> bool:
 
 
 def verify_admin_credentials(username: str, password: str) -> bool:
-    """Return whether the provided credentials match the configured administrator."""
+    """Return whether the provided credentials match a configured administrator."""
     if not settings.admin_dashboard_configured:
         return False
 
-    return secrets.compare_digest(username, settings.ADMIN_USERNAME) and verify_admin_password(
-        password,
-        settings.ADMIN_PASSWORD_HASH,
-    )
+    for configured_username, user_config in settings.admin_user_configs.items():
+        if secrets.compare_digest(username, configured_username) and verify_admin_password(
+            password,
+            user_config["password_hash"],
+        ):
+            return True
+
+    return False
 
 
 def create_admin_session_token(username: str, issued_at: int | None = None) -> str:
@@ -118,12 +123,14 @@ def verify_admin_session_token(token: str | None, now: int | None = None) -> Adm
     expires_at = payload.get("exp")
     if not isinstance(username, str) or not isinstance(expires_at, int):
         return None
-    if not secrets.compare_digest(username, settings.ADMIN_USERNAME):
+
+    user_config = settings.admin_user_configs.get(username)
+    if user_config is None:
         return None
     if expires_at <= int(now if now is not None else time.time()):
         return None
 
-    return AdminSession(username=username, expires_at=expires_at)
+    return AdminSession(username=username, role=user_config["role"], expires_at=expires_at)
 
 
 def get_admin_session(request: Request) -> AdminSession | None:
@@ -140,6 +147,29 @@ async def require_admin_session(request: Request) -> AdminSession:
             detail="Administrator login required",
         )
     request.state.admin_username = session.username
+    request.state.admin_role = session.role
+    return session
+
+
+async def require_admin_operator_session(request: Request) -> AdminSession:
+    """Require an administrator with permission to run maintenance actions."""
+    session = await require_admin_session(request)
+    if session.role not in {"admin", "operator"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator operator role required",
+        )
+    return session
+
+
+async def require_admin_role_session(request: Request) -> AdminSession:
+    """Require a full administrator role."""
+    session = await require_admin_session(request)
+    if session.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator role required",
+        )
     return session
 
 

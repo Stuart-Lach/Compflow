@@ -7,12 +7,18 @@ from app.api.v1 import routes_runs
 from app.config import settings
 
 
-def _configure_admin(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "ADMIN_USERNAME", "admin")
+def _configure_admin(monkeypatch, role: str = "admin") -> None:
+    password_hash = hash_admin_password("correct-password", "00" * 16)
+    monkeypatch.setattr(
+        settings,
+        "ADMIN_USERS",
+        json.dumps({"admin": {"password_hash": password_hash, "role": role}}),
+    )
+    monkeypatch.setattr(settings, "ADMIN_USERNAME", "")
     monkeypatch.setattr(
         settings,
         "ADMIN_PASSWORD_HASH",
-        hash_admin_password("correct-password", "00" * 16),
+        "",
     )
     monkeypatch.setattr(settings, "ADMIN_SESSION_SECRET", "test-secret-" * 4)
     monkeypatch.setattr(settings, "ADMIN_SESSION_TTL_SECONDS", 3600)
@@ -83,6 +89,8 @@ def test_admin_login_allows_dashboard_and_overview(client, monkeypatch):
     assert body["network"]["required"] is True
     assert body["metrics"]["runs_total"] == 1
     assert body["recent_runs"][0]["payroll_run_id"] == "PAY-ADMIN-001"
+    assert body["session"] == {"username": "admin", "role": "admin"}
+    assert body["admin_audit_events"][0]["event_type"] == "admin_login"
 
 
 def test_admin_rate_limit_reset_is_protected(client, monkeypatch):
@@ -116,3 +124,45 @@ def test_admin_rate_limit_reset_is_protected(client, monkeypatch):
     assert reset.status_code == 200
     assert reset.json()["status"] == "ok"
     assert after_reset.status_code == 404
+
+
+def test_viewer_admin_cannot_run_maintenance(client, monkeypatch):
+    _configure_admin(monkeypatch, role="viewer")
+
+    login = client.post(
+        "/admin/login",
+        data={"username": "admin", "password": "correct-password"},
+        follow_redirects=False,
+    )
+    reset = client.post("/admin/api/maintenance/rate-limit/reset")
+    readiness = client.get("/admin/api/maintenance/readiness")
+
+    assert login.status_code == 303
+    assert reset.status_code == 403
+    assert readiness.status_code == 403
+
+
+def test_admin_test_alert_uses_configured_webhook(client, monkeypatch):
+    captured: list[dict] = []
+
+    async def fake_post_webhook(payload: dict) -> None:
+        captured.append(payload)
+
+    _configure_admin(monkeypatch, role="operator")
+    monkeypatch.setattr(settings, "ALERT_WEBHOOK_URL", "https://alerts.example/webhook")
+    monkeypatch.setattr("app.admin.alerts._post_webhook", fake_post_webhook)
+
+    login = client.post(
+        "/admin/login",
+        data={"username": "admin", "password": "correct-password"},
+        follow_redirects=False,
+    )
+    alert = client.post("/admin/api/maintenance/alerts/test")
+    overview = client.get("/admin/api/overview")
+
+    assert login.status_code == 303
+    assert alert.status_code == 200
+    assert alert.json()["status"] == "delivered"
+    assert captured[0]["trigger"] == "admin_test"
+    assert captured[0]["alerts"][0]["title"] == "Compflow production alert test"
+    assert overview.json()["admin_audit_events"][0]["event_type"] == "maintenance_alert_test"

@@ -99,17 +99,17 @@ pytest tests/test_calculation_paye.py -v
 - `DATABASE_URL=<your-supabase-postgres-url>`
 - `CORS_ORIGINS=http://localhost:3000,https://YOUR-VERCEL-DOMAIN.vercel.app`
 - `API_KEY_BINDINGS={"COMPANY_ID":["active-secret","rotation-secret"]}`
-- `ADMIN_USERNAME=<administrator-username>`
-- `ADMIN_PASSWORD_HASH=<pbkdf2 hash; generate with python -m app.admin.security>`
+- `ADMIN_USERS={"admin@example.com":{"password_hash":"pbkdf2 hash","role":"admin"}}`
 - `ADMIN_SESSION_SECRET=<random 32+ character secret>`
 - `ADMIN_COOKIE_SECURE=true`
+- `ALERT_WEBHOOK_URL=<https webhook for Slack/Teams/PagerDuty/Make/Zapier>`
 - `AUTO_CREATE_SCHEMA=false`
 - `FILE_STORAGE_BACKEND=database`
 
 The root-level `render.yaml` installs the package, runs `alembic upgrade head`,
 and then starts `uvicorn app.main:app`. Production startup fails fast if
-SQLite, wildcard CORS, local evidence storage, automatic schema creation, or
-an empty API key/admin configuration is used.
+SQLite, wildcard CORS, local evidence storage, automatic schema creation, an
+empty API key/admin configuration, or missing production alert delivery is used.
 
 ### Administrator dashboard
 
@@ -120,12 +120,13 @@ The desktop administrator console is available at:
 ```
 
 It is separate from company API keys. Company API keys authenticate payroll
-integrations; the admin console uses an administrator username, password hash,
-and signed secure session cookie. Use it for:
+integrations; the admin console uses named administrator users, password hashes,
+roles, and signed secure session cookies. Use it for:
 
 - service readiness and database/ruleset status
 - recent compliance-run monitoring
 - operational alerts
+- recent administrator audit events
 - maintenance actions such as readiness checks and rate-limit reset
 
 Generate the password hash from the installed package:
@@ -134,8 +135,37 @@ Generate the password hash from the installed package:
 python -m app.admin.security
 ```
 
-Set the resulting value as `ADMIN_PASSWORD_HASH`. Do not store a plaintext
+Set the resulting value in `ADMIN_USERS`. Do not store a plaintext
 administrator password in `.env`, Render, or source control.
+
+Example:
+
+```json
+{
+  "admin@example.com": {
+    "password_hash": "pbkdf2_sha256$390000$...",
+    "role": "admin"
+  },
+  "ops@example.com": {
+    "password_hash": "pbkdf2_sha256$390000$...",
+    "role": "operator"
+  },
+  "auditor@example.com": {
+    "password_hash": "pbkdf2_sha256$390000$...",
+    "role": "viewer"
+  }
+}
+```
+
+Roles:
+
+- `admin`: full administrator
+- `operator`: can monitor and run maintenance actions
+- `viewer`: can monitor only
+
+Configure `ALERT_WEBHOOK_URL` with an HTTPS incident-routing webhook. The
+dashboard sends critical/warning operational alerts with in-process dedupe, and
+the maintenance panel includes a test-alert action for production verification.
 
 Protected payroll and export endpoints require:
 

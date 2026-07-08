@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.audit import recent_admin_events
 from app.config import settings
 from app.rulesets.registry import get_current_ruleset
 from app.storage.db import IssueRecord, RunRecord
@@ -28,6 +29,7 @@ async def build_admin_overview(session: AsyncSession) -> dict[str, Any]:
     validation_errors = await _count_issues(session, severity="error")
     validation_warnings = await _count_issues(session, severity="warning")
     recent_runs = await _recent_runs(session)
+    audit_events = await recent_admin_events(session)
     alerts = _build_alerts(
         database_status=database_status,
         ruleset_status=ruleset_status,
@@ -50,6 +52,9 @@ async def build_admin_overview(session: AsyncSession) -> dict[str, Any]:
             "current_ruleset": ruleset_status,
             "file_storage_backend": settings.FILE_STORAGE_BACKEND,
             "api_prefix": settings.API_V1_PREFIX,
+            "alert_delivery": "configured"
+            if settings.alert_delivery_configured
+            else "not_configured",
         },
         "metrics": {
             "runs_total": total_runs,
@@ -61,9 +66,11 @@ async def build_admin_overview(session: AsyncSession) -> dict[str, Any]:
         },
         "alerts": alerts,
         "recent_runs": recent_runs,
+        "admin_audit_events": audit_events,
         "maintenance": {
             "readiness_endpoint": "/ready",
             "rate_limit_reset_endpoint": "/admin/api/maintenance/rate-limit/reset",
+            "test_alert_endpoint": "/admin/api/maintenance/alerts/test",
         },
     }
 
@@ -219,6 +226,15 @@ def _build_alerts(
                 "severity": "info",
                 "title": "Non-production environment",
                 "message": f"The service is currently running in {settings.APP_ENV}.",
+            }
+        )
+
+    if not settings.alert_delivery_configured:
+        alerts.append(
+            {
+                "severity": "info",
+                "title": "Alert delivery not configured",
+                "message": "Set ALERT_WEBHOOK_URL before production cutover.",
             }
         )
 

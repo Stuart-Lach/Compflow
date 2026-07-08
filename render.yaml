@@ -28,9 +28,7 @@ services:
         value: 120
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: 60
-      - key: ADMIN_USERNAME
-        sync: false
-      - key: ADMIN_PASSWORD_HASH
+      - key: ADMIN_USERS
         sync: false
       - key: ADMIN_SESSION_SECRET
         sync: false
@@ -38,3 +36,11 @@ services:
         value: 28800
       - key: ADMIN_COOKIE_SECURE
         value: true
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: ALERT_WEBHOOK_TIMEOUT_SECONDS
+        value: 5
+      - key: ALERT_DEDUP_WINDOW_SECONDS
+        value: 900
+      - key: ALERT_SEVERITIES
+        value: critical,warning

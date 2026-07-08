@@ -47,11 +47,18 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_SECONDS: int = 60
 
     # Administrator dashboard
+    ADMIN_USERS: str = ""
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: str = ""
     ADMIN_SESSION_SECRET: str = ""
     ADMIN_SESSION_TTL_SECONDS: int = 8 * 60 * 60
     ADMIN_COOKIE_SECURE: bool = False
+
+    # Alert delivery
+    ALERT_WEBHOOK_URL: str = ""
+    ALERT_WEBHOOK_TIMEOUT_SECONDS: int = 5
+    ALERT_DEDUP_WINDOW_SECONDS: int = 15 * 60
+    ALERT_SEVERITIES: str = "critical,warning"
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
@@ -63,15 +70,21 @@ class Settings(BaseSettings):
             raise ValueError("DEBUG must be false in production")
         if not self.api_key_bindings:
             raise ValueError("API_KEY_BINDINGS must contain at least one company in production")
-        if not self.admin_dashboard_configured:
+        admin_users = self.admin_user_configs
+        if not admin_users:
             raise ValueError(
-                "ADMIN_USERNAME, ADMIN_PASSWORD_HASH, and ADMIN_SESSION_SECRET "
-                "must be configured in production"
+                "ADMIN_USERS and ADMIN_SESSION_SECRET must be configured in production"
             )
+        if not any(user["role"] == "admin" for user in admin_users.values()):
+            raise ValueError("ADMIN_USERS must contain at least one administrator in production")
         if len(self.ADMIN_SESSION_SECRET) < 32:
             raise ValueError("ADMIN_SESSION_SECRET must be at least 32 characters in production")
         if not self.ADMIN_COOKIE_SECURE:
             raise ValueError("ADMIN_COOKIE_SECURE must be true in production")
+        if not self.alert_delivery_configured:
+            raise ValueError("ALERT_WEBHOOK_URL must be configured in production")
+        if not self.ALERT_WEBHOOK_URL.startswith("https://"):
+            raise ValueError("ALERT_WEBHOOK_URL must use https in production")
         if self.database_url_for_sqlalchemy.startswith("sqlite"):
             raise ValueError("Production requires PostgreSQL; SQLite is not supported")
         if self.FILE_STORAGE_BACKEND != "database":
@@ -125,13 +138,78 @@ class Settings(BaseSettings):
     @property
     def admin_dashboard_configured(self) -> bool:
         """Return whether administrator login has all required secrets configured."""
-        return all(
-            [
-                self.ADMIN_USERNAME.strip(),
-                self.ADMIN_PASSWORD_HASH.strip(),
-                self.ADMIN_SESSION_SECRET.strip(),
-            ]
+        return bool(self.admin_user_configs and self.ADMIN_SESSION_SECRET.strip())
+
+    @property
+    def admin_user_configs(self) -> dict[str, dict[str, str]]:
+        """
+        Return administrator user configuration.
+
+        Preferred production format:
+        {
+          "admin@example.com": {
+            "password_hash": "pbkdf2_sha256$...",
+            "role": "admin"
+          }
+        }
+
+        Supported roles: admin, operator, viewer.
+        """
+        allowed_roles = {"admin", "operator", "viewer"}
+        if self.ADMIN_USERS.strip():
+            try:
+                raw = json.loads(self.ADMIN_USERS)
+            except json.JSONDecodeError as exc:
+                raise ValueError("ADMIN_USERS must be valid JSON") from exc
+
+            if not isinstance(raw, dict):
+                raise ValueError("ADMIN_USERS must be a JSON object")
+
+            users: dict[str, dict[str, str]] = {}
+            for username, config in raw.items():
+                if not isinstance(username, str) or not username.strip():
+                    raise ValueError("ADMIN_USERS usernames must be non-empty strings")
+                if not isinstance(config, dict):
+                    raise ValueError("Each ADMIN_USERS value must be an object")
+                password_hash = config.get("password_hash")
+                role = config.get("role", "viewer")
+                if not isinstance(password_hash, str) or not password_hash.strip():
+                    raise ValueError(f"Admin user {username!r} must have a password_hash")
+                if not isinstance(role, str) or role not in allowed_roles:
+                    raise ValueError(
+                        f"Admin user {username!r} role must be one of "
+                        f"{', '.join(sorted(allowed_roles))}"
+                    )
+                users[username.strip()] = {
+                    "password_hash": password_hash.strip(),
+                    "role": role,
+                }
+
+            return users
+
+        if self.ADMIN_USERNAME.strip() and self.ADMIN_PASSWORD_HASH.strip():
+            return {
+                self.ADMIN_USERNAME.strip(): {
+                    "password_hash": self.ADMIN_PASSWORD_HASH.strip(),
+                    "role": "admin",
+                }
+            }
+
+        return {}
+
+    @property
+    def alert_severities_list(self) -> tuple[str, ...]:
+        """Return alert severities that should be delivered externally."""
+        return tuple(
+            severity.strip()
+            for severity in self.ALERT_SEVERITIES.split(",")
+            if severity.strip()
         )
+
+    @property
+    def alert_delivery_configured(self) -> bool:
+        """Return whether outbound alert delivery is configured."""
+        return bool(self.ALERT_WEBHOOK_URL.strip())
 
     @property
     def database_url_for_sqlalchemy(self) -> str:

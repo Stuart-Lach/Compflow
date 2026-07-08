@@ -62,6 +62,7 @@ async def audit_request(
 ) -> Response:
     """Log request metadata without recording payroll payloads or API keys."""
     request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    request.state.request_id = request_id
     started = time.perf_counter()
     status_code = 500
     try:
